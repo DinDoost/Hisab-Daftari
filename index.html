@@ -2052,7 +2052,12 @@ async function phoneTakenElsewhere(ph){
   }catch(e){ console.error(e); return false; }
 }
 /* ---------- customer portal (read-only, code only) ---------- */
-let PORTAL = { code:'', err:'', busy:false, data:null };
+let PORTAL = { code:'', phone:'', err:'', busy:false, data:null };
+const PORTAL_PHONE_KEY = 'hisab_portal_phone';
+function portalOwnerView(){ return !!(S.loggedIn && cloudUser); }
+function savedPortalPhone(){ try{ return localStorage.getItem(PORTAL_PHONE_KEY) || ''; }catch(e){ return ''; } }
+function savePortalPhone(p){ try{ localStorage.setItem(PORTAL_PHONE_KEY, p); }catch(e){} }
+function clearPortalPhone(){ try{ localStorage.removeItem(PORTAL_PHONE_KEY); }catch(e){} }
 function portalEl(){
   let el = document.getElementById('portal');
   if(!el){
@@ -2063,12 +2068,12 @@ function portalEl(){
   return el;
 }
 function closePortal(){
-  PORTAL = { code:'', err:'', busy:false, data:null };
+  PORTAL = { code:'', phone:'', err:'', busy:false, data:null };
   const el = document.getElementById('portal');
   if(el){ el.classList.add('hidden'); el.innerHTML = ''; }
 }
 function openPortal(){
-  PORTAL = { code:'', err:'', busy:false, data:null };
+  PORTAL = { code:'', phone:'', err:'', busy:false, data:null };
   renderPortal();
   if(!OV.includes('portal')) pushOv('portal');
 }
@@ -2090,9 +2095,10 @@ function renderPortal(){
     el.innerHTML = `
       <div class="pt-wrap">
         <div class="pt-top"><span class="sp"></span><h1>حساب مشتری</h1><button class="ic" data-a="portalClose" aria-label="بستن">${ICON.close}</button></div>
-        <p class="hint">کد ۶ رقمی حساب خود را وارد کنید.</p>
+        <p class="hint">${(savedPortalPhone() || portalOwnerView()) ? 'کد ۶ رقمی حساب خود را وارد کنید.' : 'شماره موبایل و کد ۶ رقمی حساب خود را وارد کنید.'}</p>
         <div class="form-card" style="margin-top:12px">
-          <div class="fld"><span class="fi">${LOCKSVG}</span><div class="fw"><label for="pt-code">کد ۶ رقمی</label><input id="pt-code" inputmode="numeric" maxlength="6" value="${esc(PORTAL.code)}"></div></div>
+          ${(savedPortalPhone() || portalOwnerView()) ? '' : `<div class="fld"><span class="fi">${LOCKSVG}</span><div class="fw"><label for="pt-phone">شماره موبایل</label><input id="pt-phone" dir="ltr" inputmode="numeric" maxlength="11" oninput="this.value=latin(this.value).replace(/\D/g,'').slice(0,11)" value="${esc(PORTAL.phone || '')}"></div></div>`}
+          <div class="fld"><span class="fi">${LOCKSVG}</span><div class="fw"><label for="pt-code">کد ۶ رقمی</label><input id="pt-code" dir="ltr" inputmode="numeric" maxlength="6" autocomplete="one-time-code" oninput="this.value=latin(this.value).replace(/\D/g,'').slice(0,6)" value="${esc(PORTAL.code)}"></div></div>
         </div>
         <div class="hint" style="min-height:22px;color:var(--neg)">${esc(PORTAL.err)}</div>
         <button class="bottom-btn" data-a="portalLogin">${ICON.check}<span>تأیید</span></button>
@@ -2134,20 +2140,36 @@ function renderPortal(){
 async function portalLogin(){
   if(PORTAL.busy) return;
   const code = latin(val('pt-code')).replace(/\D/g, '');
-  PORTAL.code = code;
+  if(portalOwnerView()){
+    PORTAL.code = code;
+    if(code.length !== 6){ PORTAL.err = 'کد ۶ رقمی را وارد کنید.'; return renderPortal(); }
+    const hit = S.parties.flatMap(p => p.c.map(c => ({ c }))).find(x => x.c.ac === code);
+    if(!hit){ PORTAL.err = 'کد وارد شده درست نیست.'; PORTAL.code = ''; return renderPortal(); }
+    const c = hit.c;
+    PORTAL.data = { name: c.n || '', photo: c.pf || '', transactions: (c.tx || []).map(t => ({
+      d: t.d || '', a: Math.trunc(Number(t.a) || 0), y: Math.trunc(Number(t.y) || 0),
+      m: Math.trunc(Number(t.m) || 1), dd: Math.trunc(Number(t.dd) || 1),
+      ts: Math.trunc(Number(t.ts) || 0), hh: t.hh ?? null, mm: t.mm ?? null })) };
+    PORTAL.err = ''; PORTAL.code = '';
+    return renderPortal();
+  }
+  const phone = savedPortalPhone() || latin(val('pt-phone')).replace(/\D/g, '');
+  PORTAL.code = code; PORTAL.phone = phone;
+  if(phone.length < 10){ PORTAL.err = 'شماره موبایل را کامل وارد کنید.'; return renderPortal(); }
   if(code.length !== 6){ PORTAL.err = 'کد ۶ رقمی را وارد کنید.'; return renderPortal(); }
   if(!supabaseClient){ PORTAL.err = 'اتصال برقرار نیست. صفحه را تازه کنید.'; return renderPortal(); }
   PORTAL.busy = true; PORTAL.err = 'در حال بررسی...'; renderPortal();
-  const { data, error } = await supabaseClient.rpc('customer_portal', { p_code: code });
+  const { data, error } = await supabaseClient.rpc('customer_portal', { p_code: code, p_phone: phone });
   PORTAL.busy = false;
   if(error){
     const m = String(error.message || '');
     PORTAL.err = m.includes('locked') ? 'به‌دلیل تلاش‌های زیاد، ۱۵ دقیقه بعد دوباره امتحان کنید.'
-      : m.includes('invalid') ? 'کد وارد شده درست نیست.'
+      : m.includes('invalid') ? 'شماره موبایل یا کد وارد شده درست نیست.'
       : 'ورود انجام نشد: ' + m;
     PORTAL.code = '';
     return renderPortal();
   }
+  if(!savedPortalPhone()) savePortalPhone(phone);
   PORTAL.data = data; PORTAL.err = ''; PORTAL.code = '';
   renderPortal();
 }
@@ -2454,8 +2476,10 @@ document.addEventListener('click', async e => {
       portalLogin(); break;
     case 'portalMenu':
       document.getElementById('pt-menu')?.classList.toggle('hidden'); break;
+    case 'portalForgetPhone':
+      clearPortalPhone(); PORTAL.err = ''; renderPortal(); break;
     case 'portalLogout':
-      PORTAL = { code:'', err:'', busy:false, data:null }; renderPortal(); break;
+      clearPortalPhone(); PORTAL = { code:'', phone:'', err:'', busy:false, data:null }; renderPortal(); break;
     case 'pickPhoto':
       document.getElementById('photo-input')?.click(); break;
     case 'cropOk': {
