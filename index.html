@@ -2360,7 +2360,7 @@ function renderPortal(){
         </div>
         <section class="hero">
           <div class="lbl">صورت حساب: ${nm}</div>
-          <div class="net"><span>${num(bal)}</span><span>${curLabel()}</span><small style="color:${bal !== 0 ? '#1e7a4c' : '#fff'};font-weight:500;font-size:20px;line-height:1.4;margin-top:6px;display:block">${status}</small></div>
+          <div class="net"><span>${num(bal)}</span><span>${curLabel()}</span><small style="color:${bal > 0 ? '#c62828' : bal < 0 ? '#0b4d2b' : '#fff'};background:${bal !== 0 ? '#fff' : 'transparent'};font-weight:700;font-size:20px;line-height:1.4;margin-top:6px;display:inline-block;padding:${bal !== 0 ? '2px 14px' : '0'};border-radius:999px">${status}</small></div>
           <div class="mini-row">
             <div class="mini"><span class="mini-name" style="display:block;white-space:nowrap;overflow:hidden">گرفت: ${nm}</span><b>${money(got)}</b></div>
             <div class="mini"><span class="mini-name" style="display:block;white-space:nowrap;overflow:hidden">پرداخت: ${nm}</span><b>${money(paid)}</b></div>
