@@ -867,7 +867,7 @@ function render(){
         </div>
         <div class="fld">
           <span class="fi">${ICON.phone}</span>
-          <div class="fw"><label for="f-phone">شماره تلفن (اختیاری)</label><input id="f-phone" inputmode="tel" maxlength="20"></div>
+          <div class="fw"><label for="f-phone">شماره موبایل (الزامی)</label><input id="f-phone" type="tel" inputmode="numeric" pattern="[0-9]*" dir="ltr" autocomplete="off" maxlength="11" oninput="this.value=latin(this.value).replace(/[^0-9]/g,'').slice(0,11)"></div>
         </div>
         <div class="fld">
           <span class="fi">${ICON.note}</span>
@@ -875,7 +875,7 @@ function render(){
         </div>
         <div class="fld">
           <span class="fi"><svg viewBox="0 0 24 24" style="stroke:var(--muted);fill:none;stroke-width:1.8;stroke-linecap:round"><rect x="5" y="10.5" width="14" height="10.5" rx="3"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></svg></span>
-          <div class="fw"><label for="f-code">کد ورود مشتری (۶ رقمی)</label><input id="f-code" inputmode="numeric" maxlength="6"></div>
+          <div class="fw"><label for="f-code">کد ورود مشتری (۴ رقمی، الزامی)</label><input id="f-code" type="tel" inputmode="numeric" pattern="[0-9]*" dir="ltr" autocomplete="off" maxlength="4" oninput="this.value=latin(this.value).replace(/[^0-9]/g,'').slice(0,4)"></div>
         </div>
       </div>
       <button class="bottom-btn" data-a="saveCust" data-p="${p.id}">${ICON.check}<span>ثبت</span></button>`;
@@ -908,12 +908,12 @@ function render(){
         <input type="file" id="photo-input" accept="image/*" style="display:none">
         <label for="f-name">نام مشتری</label>
         <input id="f-name" value="${esc(c.n)}" maxlength="60">
-        <label for="f-phone">شماره تلفن (اختیاری)</label>
-        <input id="f-phone" inputmode="tel" maxlength="20" value="${c.ph ? fa(c.ph) : ''}">
+        <label for="f-phone">شماره موبایل (الزامی)</label>
+        <input id="f-phone" type="tel" inputmode="numeric" pattern="[0-9]*" dir="ltr" autocomplete="off" maxlength="11" oninput="this.value=latin(this.value).replace(/[^0-9]/g,'').slice(0,11)" value="${c.ph || ''}">
         <label for="f-ds">توضیحات (اختیاری)</label>
         <textarea id="f-ds" rows="2" maxlength="200">${esc(c.ds || '')}</textarea>
-        <label for="f-code">کد ورود مشتری (۶ رقمی، برای تغییر وارد کنید)</label>
-        <input id="f-code" inputmode="numeric" maxlength="6" value="${esc(c.ac || '')}">
+        <label for="f-code">کد ورود مشتری (۴ رقمی، الزامی)</label>
+        <input id="f-code" type="tel" inputmode="numeric" pattern="[0-9]*" dir="ltr" autocomplete="off" maxlength="4" oninput="this.value=latin(this.value).replace(/[^0-9]/g,'').slice(0,4)" value="${/^[0-9]{4}$/.test(c.ac || '') ? c.ac : ''}">
         <button class="btn pri-btn" data-a="saveCustPage" data-p="${p.id}" data-c="${c.id}">ثبت ویرایش</button>
       </div>`;
     return;
@@ -2331,10 +2331,10 @@ function renderPortal(){
     el.innerHTML = `
       <div class="pt-wrap">
         <div class="pt-top"><span class="sp"></span><h1>حساب مشتری</h1><button class="ic" data-a="portalClose" aria-label="بستن">${ICON.close}</button></div>
-        <p class="hint">${(savedPortalPhone() || portalOwnerView()) ? 'کد ۶ رقمی حساب خود را وارد کنید.' : 'شماره موبایل و کد ۶ رقمی حساب خود را وارد کنید.'}</p>
+        <p class="hint">شماره موبایل و کد ۴ رقمی حساب خود را وارد کنید.</p>
         <div class="form-card" style="margin-top:12px">
-          ${(savedPortalPhone() || portalOwnerView()) ? '' : `<div class="fld"><span class="fi">${LOCKSVG}</span><div class="fw"><label for="pt-phone">شماره موبایل</label><input id="pt-phone" dir="ltr" inputmode="numeric" maxlength="11" oninput="this.value=latin(this.value).replace(/\D/g,'').slice(0,11)" value="${esc(PORTAL.phone || '')}"></div></div>`}
-          <div class="fld"><span class="fi">${LOCKSVG}</span><div class="fw"><label for="pt-code">کد ۶ رقمی</label><input id="pt-code" dir="ltr" inputmode="numeric" maxlength="6" autocomplete="one-time-code" oninput="this.value=latin(this.value).replace(/\D/g,'').slice(0,6)" value="${esc(PORTAL.code)}"></div></div>
+          <div class="fld"><span class="fi">${LOCKSVG}</span><div class="fw"><label for="pt-phone">شماره موبایل</label><input id="pt-phone" type="tel" dir="ltr" inputmode="numeric" pattern="[0-9]*" autocomplete="tel" maxlength="11" oninput="this.value=latin(this.value).replace(/[^0-9]/g,'').slice(0,11)" value="${esc(PORTAL.phone || savedPortalPhone() || '')}"></div></div>
+          <div class="fld"><span class="fi">${LOCKSVG}</span><div class="fw"><label for="pt-code">کد ۴ رقمی</label><input id="pt-code" type="tel" dir="ltr" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="4" oninput="this.value=latin(this.value).replace(/[^0-9]/g,'').slice(0,4)" value="${esc(PORTAL.code)}"></div></div>
         </div>
         <div class="hint" style="min-height:22px;color:var(--neg)">${esc(PORTAL.err)}</div>
         <button class="bottom-btn" data-a="portalLogin">${ICON.check}<span>تأیید</span></button>
@@ -2375,12 +2375,14 @@ function renderPortal(){
 }
 async function portalLogin(){
   if(PORTAL.busy) return;
+  const phone = latin(val('pt-phone')).replace(/\D/g, '');
   const code = latin(val('pt-code')).replace(/\D/g, '');
+  PORTAL.phone = phone; PORTAL.code = code;
+  if(phone.length < 10){ PORTAL.err = 'شماره موبایل را کامل وارد کنید.'; return renderPortal(); }
+  if(!/^[0-9]{4}$/.test(code)){ PORTAL.err = 'کد ۴ رقمی را وارد کنید.'; return renderPortal(); }
   if(portalOwnerView()){
-    PORTAL.code = code;
-    if(code.length !== 6){ PORTAL.err = 'کد ۶ رقمی را وارد کنید.'; return renderPortal(); }
-    const hit = S.parties.flatMap(p => p.c.map(c => ({ c }))).find(x => x.c.ac === code);
-    if(!hit){ PORTAL.err = 'کد وارد شده درست نیست.'; PORTAL.code = ''; return renderPortal(); }
+    const hit = S.parties.flatMap(p => p.c.map(c => ({ c }))).find(x => x.c.ac === code && (x.c.ph || '').replace(/\D/g, '') === phone);
+    if(!hit){ PORTAL.err = 'شماره موبایل یا کد وارد شده درست نیست.'; PORTAL.code = ''; return renderPortal(); }
     const c = hit.c;
     PORTAL.data = { name: c.n || '', photo: c.pf || '', transactions: (c.tx || []).map(t => ({
       d: t.d || '', a: Math.trunc(Number(t.a) || 0), y: Math.trunc(Number(t.y) || 0),
@@ -2389,10 +2391,6 @@ async function portalLogin(){
     PORTAL.err = ''; PORTAL.code = '';
     return renderPortal();
   }
-  const phone = savedPortalPhone() || latin(val('pt-phone')).replace(/\D/g, '');
-  PORTAL.code = code; PORTAL.phone = phone;
-  if(phone.length < 10){ PORTAL.err = 'شماره موبایل را کامل وارد کنید.'; return renderPortal(); }
-  if(code.length !== 6){ PORTAL.err = 'کد ۶ رقمی را وارد کنید.'; return renderPortal(); }
   if(!supabaseClient){ PORTAL.err = 'اتصال برقرار نیست. صفحه را تازه کنید.'; return renderPortal(); }
   PORTAL.busy = true; PORTAL.err = 'در حال بررسی...'; renderPortal();
   const { data, error } = await supabaseClient.rpc('customer_portal', { p_code: code, p_phone: phone });
@@ -2405,10 +2403,11 @@ async function portalLogin(){
     PORTAL.code = '';
     return renderPortal();
   }
-  if(!savedPortalPhone()) savePortalPhone(phone);
+  savePortalPhone(phone);
   PORTAL.data = data; PORTAL.err = ''; PORTAL.code = '';
   renderPortal();
 }
+
 /* ---------- clock picker (analog, drag the hand) ---------- */
 let TCK = { h24:12, mi:0, mode:'hour', open:false };
 let TC_DRAG = false, TC_JUST = false;
@@ -2831,12 +2830,11 @@ document.addEventListener('click', async e => {
       const ph = latin(val('f-phone')).replace(/\D/g, '');
       const ds = val('f-ds').trim();
       if(!n){ document.getElementById('f-name').focus(); alert('نام مشتری را وارد کنید.'); return; }
-      if(ph && ph.length < 7){ document.getElementById('f-phone').focus(); alert('شماره تلفن معتبر وارد کنید یا آن را خالی بگذارید.'); return; }
-      const dup = !!ph && S.parties.some(pp => pp.c.some(cc => cc.ph === ph));
-      if(dup){ alert('مشتری با این شماره قبلاً ثبت شده است.'); return; }
-      if(ph && await phoneTakenElsewhere(ph)){ document.getElementById('f-phone').focus(); alert('این شماره تلفن در حساب دیگری ثبت شده است.'); return; }
+      if(ph.length < 10){ document.getElementById('f-phone').focus(); alert('شماره موبایل را کامل وارد کنید.'); return; }
+      if(S.parties.some(pp => pp.c.some(cc => cc.ph === ph))){ alert('مشتری با این شماره قبلاً ثبت شده است.'); return; }
+      if(await phoneTakenElsewhere(ph)){ document.getElementById('f-phone').focus(); alert('این شماره تلفن در حساب دیگری ثبت شده است.'); return; }
       const ac = latin(val('f-code')).replace(/\D/g, '');
-      if(ac.length !== 6){ document.getElementById('f-code').focus(); alert('کد ۶ رقمی مشتری را وارد کنید.'); return; }
+      if(!/^[0-9]{4}$/.test(ac)){ document.getElementById('f-code').focus(); alert('کد ۴ رقمی مشتری را وارد کنید.'); return; }
       if(S.parties.some(pp => pp.c.some(cc => cc.ac === ac))){ document.getElementById('f-code').focus(); alert('این کد قبلاً برای مشتری دیگری در همین حساب استفاده شده است.'); return; }
       if(await codeTakenElsewhere(ac)){ document.getElementById('f-code').focus(); alert('این کد قبلاً در حساب دیگری استفاده شده است. کد دیگری انتخاب کنید.'); return; }
       const id = uid();
@@ -2859,13 +2857,12 @@ document.addEventListener('click', async e => {
       const ph = latin(val('f-phone')).replace(/\D/g, '');
       const ds = val('f-ds').trim();
       if(!n){ document.getElementById('f-name').focus(); alert('نام مشتری را وارد کنید.'); return; }
-      if(ph && ph.length < 7){ document.getElementById('f-phone').focus(); alert('شماره تلفن معتبر وارد کنید یا آن را خالی بگذارید.'); return; }
-      const dup = !!ph && S.parties.some(pp => pp.c.some(cc => cc.id !== c.id && cc.ph === ph));
-      if(dup){ alert('مشتری با این شماره قبلاً ثبت شده است.'); return; }
-      if(ph && await phoneTakenElsewhere(ph)){ document.getElementById('f-phone').focus(); alert('این شماره تلفن در حساب دیگری ثبت شده است.'); return; }
+      if(ph.length < 10){ document.getElementById('f-phone').focus(); alert('شماره موبایل را کامل وارد کنید.'); return; }
+      if(S.parties.some(pp => pp.c.some(cc => cc.id !== c.id && cc.ph === ph))){ alert('مشتری با این شماره قبلاً ثبت شده است.'); return; }
+      if(await phoneTakenElsewhere(ph)){ document.getElementById('f-phone').focus(); alert('این شماره تلفن در حساب دیگری ثبت شده است.'); return; }
       const ac = latin(val('f-code')).replace(/\D/g, '');
-      if(ac && ac.length !== 6){ document.getElementById('f-code').focus(); alert('کد باید ۶ رقمی باشد.'); return; }
-      if(ac && ac !== c.ac){
+      if(!/^[0-9]{4}$/.test(ac)){ document.getElementById('f-code').focus(); alert('کد ۴ رقمی مشتری را وارد کنید.'); return; }
+      if(ac !== c.ac){
         if(S.parties.some(pp => pp.c.some(cc => cc.id !== c.id && cc.ac === ac))){ document.getElementById('f-code').focus(); alert('این کد قبلاً برای مشتری دیگری در همین حساب استفاده شده است.'); return; }
         if(await codeTakenElsewhere(ac)){ document.getElementById('f-code').focus(); alert('این کد قبلاً در حساب دیگری استفاده شده است. کد دیگری انتخاب کنید.'); return; }
       }
