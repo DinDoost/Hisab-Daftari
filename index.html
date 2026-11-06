@@ -1684,6 +1684,7 @@ async function lkOk(){
   if(LK.mode === 'unlock'){
     if(LK.buf === S.pin){
       if(cloudUser){ lkUnlock(); refreshCloudQuiet(); return; }
+      if(S.loggedIn && (!supabaseClient || !navigator.onLine)){ lkUnlock(); return; }
       LK.mode = 'login'; LK.f.mail = S.email || ''; LK.f.pass = ''; LK.buf = '';
       LK.err = 'نشست حساب ابری پایان یافته است. با ایمیل و رمز حساب وارد شوید.';
       renderLock(); return;
@@ -3076,7 +3077,16 @@ async function refreshCloudQuiet(){
   }
 }
 async function initCloudSession(){
-  if(!supabaseClient){ LK.locked = true; LK.err = 'اتصال Supabase بارگذاری نشد. اینترنت و آدرس پروژه را بررسی کنید.'; renderLock(); return; }
+  if(!supabaseClient){
+    /* کتابخانه ابری در دسترس نیست (مثلاً آفلاین): اگر قبلاً وارد شده‌اید، با PIN و اطلاعات ذخیره‌شده باز شود */
+    if(S.loggedIn && S.email){
+      let su = false; try{ su = sessionStorage.getItem('hisab_unlocked') === '1'; }catch(e){}
+      if(S.pin && !su){ LK.locked = true; LK.mode = 'unlock'; LK.buf = ''; LK.err = ''; LK.f.mail = S.email; renderLock(); render(); }
+      else lkUnlock();
+      return;
+    }
+    LK.locked = true; LK.err = 'اتصال Supabase بارگذاری نشد. اینترنت و آدرس پروژه را بررسی کنید.'; renderLock(); return;
+  }
   const { data, error } = await supabaseClient.auth.getSession();
   let sessUser = data?.session?.user || null;
   /* اگر قبلاً وارد شده‌اید و PIN دارید، نشست ذخیره‌شده روی گوشی کافی است (حتی بدون اینترنت) */
