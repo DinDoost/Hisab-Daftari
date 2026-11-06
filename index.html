@@ -940,7 +940,7 @@ function render(){
       <section class="hero">
         <div class="lbl">صورت حساب: ${esc(c.n)}</div>
         <div class="net"><span>${num(bal)}</span><span>${curLabel()}</span></div>
-        <div style="margin-top:8px;font-size:15px;font-weight:700;color:${bal > 0 ? '#fca5a5' : bal < 0 ? '#86efac' : '#fff'}">${bal > 0 ? `بدهی ${esc(c.n)}` : bal < 0 ? `طلب ${esc(c.n)}` : 'تسویه'}</div>
+        <div style="margin-top:10px;font-size:26px;font-weight:900;line-height:1.5;color:${bal > 0 ? '#fca5a5' : bal < 0 ? '#86efac' : '#fff'}">${bal > 0 ? 'بدهکار است' : bal < 0 ? 'طلب دارد' : 'تسویه'}</div>
         <div class="mini-row">
           <div class="mini"><span class="mini-name" style="display:block;white-space:nowrap;overflow:hidden">گرفت: ${esc(c.n)}</span><b>${money(debts)}</b></div>
           <div class="mini"><span class="mini-name" style="display:block;white-space:nowrap;overflow:hidden">پرداخت: ${esc(c.n)}</span><b>${money(pays)}</b></div>
@@ -1623,8 +1623,8 @@ function renderLock(){
       <h1 class="su-h">${heads[0]}</h1>
       <p class="su-p">${heads[1]}</p>
       ${M !== 'newpass' ? `<div class="su-fld"><label for="au-mail">ایمیل</label><input id="au-mail" class="ltr" type="email" inputmode="email" autocomplete="email" value="${esc(F.mail)}"></div>` : ''}
-      <div class="su-fld"><label for="au-pass">رمز عبور</label><input id="au-pass" class="ltr" type="password" autocomplete="${M === 'login' ? 'current-password' : 'new-password'}" value="${esc(F.pass)}"></div>
-      ${M !== 'login' ? `<div class="su-fld"><label for="au-pass2">تکرار رمز عبور</label><input id="au-pass2" class="ltr" type="password" autocomplete="new-password" value="${esc(F.pass2)}"></div>` : ''}
+      <div class="su-fld"><label for="au-pass">رمز عبور</label><div style="position:relative"><input id="au-pass" class="ltr" type="password" style="padding-right:44px" autocomplete="${M === 'login' ? 'current-password' : 'new-password'}" value="${esc(F.pass)}"><button type="button" aria-label="نمایش رمز" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:0;padding:6px;margin:0;width:auto;height:auto;min-height:0;cursor:pointer;color:#64748b;line-height:0" onclick="pwToggle(this)"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
+      ${M !== 'login' ? `<div class="su-fld"><label for="au-pass2">تکرار رمز عبور</label><div style="position:relative"><input id="au-pass2" class="ltr" type="password" style="padding-right:44px" autocomplete="new-password" value="${esc(F.pass2)}"><button type="button" aria-label="نمایش رمز" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:0;padding:6px;margin:0;width:auto;height:auto;min-height:0;cursor:pointer;color:#64748b;line-height:0" onclick="pwToggle(this)"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>` : ''}
       <div class="lk-msg ${LK.kind || ''}" style="margin:0;min-height:20px">${esc(LK.err)}</div>
       <button class="su-btn" data-a="${M === 'newpass' ? 'passSave' : 'authLogin'}">${M === 'newpass' ? 'ذخیره رمز عبور' : 'ورود'}${ARROW}</button>
       
@@ -1741,6 +1741,16 @@ async function hashPw(mail, pw){
 function readF(){
   LK.f = { mail: val('au-mail').trim() || LK.f.mail, pass: val('au-pass'), pass2: val('au-pass2') };
   if(!document.getElementById('au-mail')) LK.f.mail = LK.f.mail;
+}
+function pwToggle(btn){
+  const inp = btn.parentElement.querySelector('input');
+  if(!inp) return;
+  const show = inp.type === 'password';
+  inp.type = show ? 'text' : 'password';
+  btn.setAttribute('aria-label', show ? 'پنهان کردن رمز' : 'نمایش رمز');
+  btn.innerHTML = show
+    ? '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/></svg>'
+    : '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 }
 function authErr(msg){ lkSay(msg, ''); }
 async function authLogin(){
