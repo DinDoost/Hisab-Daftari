@@ -293,6 +293,11 @@ input:focus,select:focus{outline:2px solid #a9cde8;border-color:transparent}
 .srow{display:flex;flex-direction:column;gap:6px;margin-top:12px}
 .srow-b{width:100%;border:1px solid var(--line);background:#fff;color:var(--text);border-radius:12px;padding:8px 14px;font-size:14px;font-weight:600;cursor:pointer;text-align:right}
 .srow-out{margin-top:18px}
+.ka-row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px;padding:6px 6px 0;font-size:13px;color:var(--muted)}
+.ka-row b{font-weight:600;color:var(--text)}
+.ka-row .ka-v{direction:rtl;text-align:left}
+.ka-row .ka-v.ok{color:var(--pos)}
+.ka-row .ka-v.old{color:var(--neg)}
 .mail-ok{display:inline-flex;align-items:center;gap:4px;flex:none;color:#1e7a4c;font-size:11px;font-weight:700;white-space:nowrap}
 .mail-ok svg{width:14px;height:14px;stroke:#1e7a4c;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
 .mail-txt small{color:var(--muted);font-size:13px;direction:ltr;text-align:left;overflow-wrap:anywhere;word-break:break-all;white-space:normal}
@@ -841,9 +846,11 @@ function render(){
         <button class="srow-b" data-a="pinToggle">پین کد امنیتی: ${S.pin ? 'فعال' : 'غیرفعال'}</button>
         ${S.pin ? '<button class="srow-b" data-a="pinChange">تغییر پین</button>' : ''}
         <button class="srow-b srow-out" data-a="authLogout">خروج از حساب</button>
+        <div class="ka-row"><b>آخرین بروزرسانی سرور</b><span class="ka-v" id="ka-v">${kaText()}</span></div>
       </div>
 
 `;
+    kaLoad();
     return;
   }
 
@@ -2237,6 +2244,42 @@ function ledgerFormHTML(){
       <button class="btn pri-btn" data-a="ledgerSave">${LG.editId ? 'ثبت ویرایش' : 'ثبت'}</button>`;
 }
 function ledgerFresh(){ return { type:'in', amt:'', desc:'', date:todayStr(), hh:new Date().getHours(), mm:new Date().getMinutes(), err:'', editId:null, sel:null }; }
+/* ---------- آخرین بروزرسانی سرور (نگه‌دارندهٔ Supabase) ---------- */
+let KA = { t:null, state:'idle' };   /* idle | loading | ok | none | err */
+function kaFmt(iso){
+  try{
+    const d = new Date(iso);
+    const dt = new Intl.DateTimeFormat('fa-IR-u-ca-persian', { year:'numeric', month:'long', day:'numeric' }).format(d);
+    const tm = new Intl.DateTimeFormat('fa-IR', { hour:'2-digit', minute:'2-digit', hour12:false }).format(d);
+    return dt + '، ساعت ' + tm;
+  }catch(e){ return String(iso); }
+}
+function kaText(){
+  if(KA.state === 'loading' || KA.state === 'idle') return 'در حال خواندن...';
+  if(KA.state === 'err') return 'خوانده نشد';
+  if(KA.state === 'none' || !KA.t) return 'هنوز بروز نشده';
+  return kaFmt(KA.t);
+}
+function kaPaint(){
+  const el = document.getElementById('ka-v'); if(!el) return;
+  el.textContent = kaText();
+  el.classList.remove('ok','old');
+  if(KA.state === 'ok' && KA.t){
+    const age = Date.now() - new Date(KA.t).getTime();
+    el.classList.add(age > 3 * 86400000 ? 'old' : 'ok');
+  }
+}
+async function kaLoad(){
+  if(!supabaseClient || !cloudUser){ KA.state = 'err'; kaPaint(); return; }
+  KA.state = 'loading'; kaPaint();
+  try{
+    const { data, error } = await supabaseClient.from('keepalive').select('last_ping').eq('id', 1).maybeSingle();
+    if(error) throw error;
+    if(data && data.last_ping){ KA.t = data.last_ping; KA.state = 'ok'; }
+    else{ KA.t = null; KA.state = 'none'; }
+  }catch(e){ console.warn('keepalive read:', e); KA.state = 'none'; }
+  if(V.view === 'settings') kaPaint();
+}
 const CB_MONTHS = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
 const PORTAL_PHONE_KEY = 'hisab_portal_phone';
 function fitMiniNames(){
