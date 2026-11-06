@@ -692,6 +692,11 @@ function playBell(){
 function soundForward(){ softTone(480, 640, 0.22, 'sine'); }
 function soundBack(){ soundForward(); }
 
+function resetToList(){
+  V = { view:'list', openId:null, custId:null, search:false, q:'' };
+  LPSEL = null;
+  try{ history.replaceState({v:V}, ''); }catch(e){}
+}
 function goTo(next, replace){
   const st = Object.assign({view:'list', openId:null, custId:null, search:false, q:''}, next);
   if(replace) history.replaceState({v:st}, ''); else { history.pushState({v:st}, ''); soundForward(); }
@@ -1678,7 +1683,7 @@ async function lkOk(){
   if(LK.buf.length < max){ LK.err = `رمز ${fa(max)} رقمی را کامل کنید.`; renderLock(); return; }
   if(LK.mode === 'unlock'){
     if(LK.buf === S.pin){
-      if(cloudUser && cloudReady) return lkUnlock();
+      if(cloudUser){ lkUnlock(); refreshCloudQuiet(); return; }
       LK.mode = 'login'; LK.f.mail = S.email || ''; LK.f.pass = ''; LK.buf = '';
       LK.err = 'نشست حساب ابری پایان یافته است. با ایمیل و رمز حساب وارد شوید.';
       renderLock(); return;
@@ -1699,6 +1704,7 @@ async function lkOk(){
       const synced = await cloudSyncNow();
       if(!synced){ LK.err = 'حساب تأیید شد، اما ذخیره اولیه اطلاعات انجام نشد. تنظیمات دیتابیس را بررسی کنید.'; renderLock(); return; }
       LK.f = { mail:S.email, pass:'', pass2:'' };
+      resetToList();
       return lkUnlock();
     }
     try{ await cloudLoad(); cloudReady = true; }
@@ -1779,6 +1785,7 @@ async function authLogin(){
   await new Promise(r => setTimeout(r, 1000));
   LK.err = ''; LK.kind = '';
   if(LK.pinReset){ LK.pinReset = false; delete S.pin; save(); }
+  resetToList();
   if(S.pin){ LK.locked = true; LK.mode = 'unlock'; renderLock(); render(); }
   else lkUnlock();
 }
@@ -1815,6 +1822,7 @@ async function authSignup(){ return authErr('ثبت‌نام عمومی بسته
     const synced = await cloudSyncNow();
     if(!synced) return authErr('حساب ساخته شد، اما ذخیره اطلاعات انجام نشد. سیاست‌های دیتابیس را بررسی کنید.');
     LK.f = { mail:S.email, pass:'', pass2:'' };
+    resetToList();
     return lkUnlock();
   }
   LK.pend = { mail, localCopy }; LK.purpose = 'signup'; LK.mode = 'verify'; LK.buf = '';
@@ -1844,6 +1852,7 @@ async function passSave(){
   S.email = cloudUser?.email || LK.f.mail; S.loggedIn = true;
   LK.f.pass = ''; LK.f.pass2 = ''; LK.err = '';
   LK.recoveryVerified = false; recClear();
+  resetToList();
   lkUnlock();
 }
 async function authLogout(){
@@ -2659,6 +2668,7 @@ document.addEventListener('click', async e => {
       SUI.curOpen = false; render(); break;
 
     case 'reset':
+      if(!navigator.onLine){ showToast('برای این کار اول به اینترنت وصل شوید.'); break; }
       if(confirm('همه طرف حساب‌ها و مشتری‌ها پاک شوند؟ این کار قابل بازگشت نیست.')){
         S = { cur: S.cur, parties: [] }; save();
         V = { view:'list', openId:null, custId:null, search:false, q:'' };
@@ -3042,11 +3052,37 @@ if(supabaseClient){
   });
 }
 
+function storedSessionUser(){
+  try{
+    for(let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      if(!k) continue;
+      if(!(/^sb-.*-auth-token$/.test(k) || k === 'supabase.auth.token')) continue;
+      const v = JSON.parse(localStorage.getItem(k) || 'null');
+      const u = v?.user || v?.currentSession?.user;
+      if(u && u.id) return u;
+    }
+  }catch(e){}
+  return null;
+}
+async function refreshCloudQuiet(){
+  if(!cloudUser || cloudReady) return;
+  try{
+    await cloudLoad();
+    cloudReady = true; S.loggedIn = true;
+    render();
+  }catch(e){
+    console.warn('cloud refresh skipped (offline?):', e);
+  }
+}
 async function initCloudSession(){
   if(!supabaseClient){ LK.locked = true; LK.err = 'اتصال Supabase بارگذاری نشد. اینترنت و آدرس پروژه را بررسی کنید.'; renderLock(); return; }
   const { data, error } = await supabaseClient.auth.getSession();
-  if(error){ LK.locked = true; LK.err = 'خواندن نشست کاربری ناموفق بود.'; renderLock(); return; }
-  if(!data.session?.user){
+  let sessUser = data?.session?.user || null;
+  /* اگر قبلاً وارد شده‌اید و PIN دارید، نشست ذخیره‌شده روی گوشی کافی است (حتی بدون اینترنت) */
+  if(!sessUser && S.loggedIn && S.pin && S.email) sessUser = storedSessionUser();
+  if(error && !sessUser){ LK.locked = true; LK.err = 'خواندن نشست کاربری ناموفق بود.'; renderLock(); return; }
+  if(!sessUser){
     cloudUser = null; cloudReady = false; LK.locked = true;
     const pr = recPending();
     if(pr){
@@ -3059,21 +3095,17 @@ async function initCloudSession(){
     }
     renderLock(); return;
   }
-  cloudUser = data.session.user; cloudReady = false;
-  try{
-    await cloudLoad(); cloudReady = true; S.loggedIn = true; delete S.passHash; delete S.reg;
-    LK.f.mail = S.email;
-    let stillUnlocked = false;
-    try{ stillUnlocked = sessionStorage.getItem('hisab_unlocked') === '1'; }catch(e){}
-    if(S.pin && !stillUnlocked){ LK.locked = true; LK.mode = 'unlock'; renderLock(); render(); }
-    else lkUnlock();
-  }catch(e){
-    console.error('Supabase initial load error:',e);
-    LK.locked = true; LK.mode = 'login'; LK.f.mail = cloudUser.email || '';
-    LK.err = 'بارگذاری اطلاعات ابری ناموفق بود. جدول‌ها و سیاست‌های امنیتی را بررسی کنید.';
-    renderLock();
-  }
+  cloudUser = sessUser; cloudReady = false;
+  S.loggedIn = true; delete S.passHash; delete S.reg;
+  LK.f.mail = S.email || cloudUser.email || '';
+  let stillUnlocked = false;
+  try{ stillUnlocked = sessionStorage.getItem('hisab_unlocked') === '1'; }catch(e){}
+  if(S.pin && !stillUnlocked){ LK.locked = true; LK.mode = 'unlock'; LK.buf = ''; LK.err = ''; renderLock(); render(); }
+  else lkUnlock();
+  /* اطلاعات ابری در پس‌زمینه خوانده می‌شود؛ اگر اینترنت نباشد، همان اطلاعات ذخیره‌شده نمایش داده می‌شود */
+  refreshCloudQuiet();
 }
+
 initCloudSession();
 </script>
 </body>
