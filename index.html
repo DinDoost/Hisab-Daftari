@@ -47,7 +47,36 @@ input:focus,select:focus{outline:2px solid #a9cde8;border-color:transparent}
 .bpos{color:#0d6b33;font-weight:700}
 .bneg{color:#c0392b;font-weight:700}
 .bal-col{display:flex;flex-direction:column;align-items:flex-start;gap:3px;flex:none}
-.bal-note{font-size:11px;color:var(--muted);white-space:nowrap}
+.bal-note{font-size:15px;font-weight:500;color:var(--muted);white-space:nowrap;line-height:1.4;letter-spacing:0}
+.cb-hero{background:linear-gradient(135deg,#4a9fd8,#2b6f9e);color:#fff;border-radius:22px;padding:22px 20px;margin:4px 0 16px;box-shadow:0 10px 24px rgba(43,111,158,.18)}
+.cb-lbl{font-size:14px;opacity:.85;font-weight:500}
+.cb-net{font-size:34px;font-weight:600;margin:6px 0 16px;letter-spacing:0}
+.cb-net.cb-pos,.cb-pos{color:#bff0d3}
+.cb-net.cb-neg,.cb-neg{color:#ffd0cc}
+.cb-cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cb-card{background:rgba(255,255,255,.14);border-radius:16px;padding:12px 14px}
+.cb-card span{display:block;font-size:13px;opacity:.85;margin-bottom:4px;font-weight:500}
+.cb-card b{font-size:16px;font-weight:600}
+.cb-title{font-size:15px;font-weight:600;color:var(--muted);margin:18px 4px 8px}
+.cb-row{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 16px;margin-bottom:10px}
+.cb-m{font-size:16px;font-weight:600;margin-bottom:8px}
+.cb-vals{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:14px}
+.cb-in{color:#1e7a4c;font-weight:500}
+.cb-out{color:#c0392b;font-weight:500}
+.cb-vals b{margin-right:auto;font-size:15px;font-weight:600}
+.lg-form{padding:16px}
+.lg-form .tbtns{margin-bottom:12px}
+.lg-save{width:100%;margin-top:6px;border:0;border-radius:14px;padding:14px;background:var(--pri);color:#fff;font-weight:700;font-size:15px;cursor:pointer}
+.lg-row{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 14px;margin-bottom:8px}
+.lg-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.lg-main b{font-size:15px;font-weight:600}
+.lg-main span{font-size:14px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lg-main small{font-size:12px;color:var(--muted)}
+.lg-del{border:0;background:#fdecea;color:#c0392b;width:34px;height:34px;border-radius:50%;font-size:20px;line-height:1;cursor:pointer;flex:none}
+.lg-more{border:0;background:var(--soft);color:var(--deep);width:36px;height:36px;border-radius:50%;font-size:18px;font-weight:700;line-height:1;cursor:pointer;flex:none}
+.lg-acts{display:flex;gap:8px;margin:-2px 0 10px}
+.lg-acts button{flex:1;border:0;border-radius:12px;padding:10px;font-weight:700;font-size:14px;cursor:pointer;background:var(--soft);color:var(--deep)}
+.lg-acts button.del{background:#fdecea;color:#c0392b}
 .btn:disabled{opacity:.4;cursor:not-allowed}
 .empty{text-align:center;color:var(--muted);padding:44px 12px;line-height:1.9}
 .fab{position:fixed;bottom:22px;left:20px;background:var(--pri);color:#fff;border:0;border-radius:999px;padding:15px 24px;font-weight:600;box-shadow:0 10px 24px rgba(58,139,194,.35);cursor:pointer;display:flex;gap:10px;align-items:center}
@@ -99,6 +128,12 @@ input:focus,select:focus{outline:2px solid #a9cde8;border-color:transparent}
 .sec-row{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .sec-row{margin:22px 4px 0}
 .sec-row .sec-title{margin:0}
+.lg-filt{display:flex;gap:6px}
+.lg-filt button{border:0;border-radius:999px;background:var(--soft);color:var(--deep);font:inherit;font-size:13px;font-weight:700;padding:8px 12px;cursor:pointer}
+.lg-filt button.on{background:var(--pri);color:#fff}
+.lg-filt button.on.r{background:#c0392b}
+.lg-filt button.on.g{background:#1e7a4c}
+.top .dots{font-size:24px;font-weight:700;line-height:1}
 .live-btn{border:0;border-radius:999px;background:var(--pri);color:#fff;font:inherit;font-size:14px;font-weight:700;padding:9px 18px;cursor:pointer;box-shadow:0 6px 16px rgba(58,139,194,.3)}
 .dt-row{display:flex;gap:14px;align-items:stretch}
 .dt-row .dbtn{flex:1;min-width:0}
@@ -285,14 +320,16 @@ const supabaseClient = window.supabase?.createClient
   : null;
 let cloudUser = null, cloudReady = false, cloudSyncTimer = null;
 let cloudSyncing = false, cloudSyncAgain = false;
+let ledgerCloudOk = true, ledgerWarned = false, ledgerStrict = false, lastLedgerErr = '';
 
 async function cloudLoad(){
   if(!supabaseClient || !cloudUser) throw new Error('اتصال حساب ابری برقرار نیست.');
   const u = cloudUser.id;
-  const [pr, cr, tr] = await Promise.all([
+  const [pr, cr, tr, lr] = await Promise.all([
     supabaseClient.from('p').select('id,n,cur').eq('u',u),
     supabaseClient.from('c').select('id,p,n,ph,ds,pf,ac').eq('u',u),
-    supabaseClient.from('t').select('id,c,a,d,y,m,dd,ts,hh,mm').eq('u',u)
+    supabaseClient.from('t').select('id,c,a,d,y,m,dd,ts,hh,mm').eq('u',u),
+    supabaseClient.from('l').select('id,ty,a,d,y,m,dd,ts,hh,mm').eq('u',u)
   ]);
   if(pr.error) throw pr.error;
   if(cr.error) throw cr.error;
@@ -314,7 +351,18 @@ async function cloudLoad(){
     customer.tx.push({ id:t.id, a:Number(t.a)||0, d:t.d||'', y:Number(t.y)||0,
       m:Number(t.m)||1, dd:Number(t.dd)||1, ts:Number(t.ts)||0, hh: t.hh == null ? undefined : Number(t.hh), mm: t.mm == null ? undefined : Number(t.mm) });
   });
-  S = { ...S, cur:S.cur || 'toman', parties, email:cloudUser.email || S.email || '', loggedIn:true };
+  /* دفتر دخل و خرج: اگر جدول آنلاین آماده نبود، نسخهٔ داخل گوشی دست نمی‌خورد */
+  let ledger = Array.isArray(S.ledger) ? S.ledger : [];
+  if(lr.error){ ledgerCloudOk = false; console.warn('ledger table unavailable:', lr.error); }
+  else{
+    ledgerCloudOk = true;
+    if((lr.data || []).length){
+      ledger = lr.data.map(r => ({ id:r.id, type:r.ty === 'out' ? 'out' : 'in', a:Number(r.a)||0, d:r.d||'',
+        y:Number(r.y)||0, m:Number(r.m)||1, dd:Number(r.dd)||1, ts:Number(r.ts)||0,
+        hh: r.hh == null ? null : Number(r.hh), mm: r.mm == null ? null : Number(r.mm) }));
+    }
+  }
+  S = { ...S, cur:S.cur || 'toman', parties, ledger, email:cloudUser.email || S.email || '', loggedIn:true };
   try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){}
 }
 
@@ -347,6 +395,35 @@ async function cloudSyncNow(){
       await deleteMissing('t', tRows);
       await deleteMissing('c', cRows);
       await deleteMissing('p', pRows);
+      /* دفتر دخل و خرج (جدول l) — اگر خطا داد، بقیهٔ اطلاعات همچنان همگام می‌شود */
+      if(!ledgerCloudOk){
+        const pr = await supabaseClient.from('l').select('id,ty,a,d,y,m,dd,ts,hh,mm').eq('u',u);
+        if(pr.error){
+          lastLedgerErr = pr.error.message || String(pr.error.code || 'error');
+          if(ledgerStrict) throw pr.error;
+        }else{
+          const have = new Set((S.ledger || []).map(x => String(x.id)));
+          (pr.data || []).forEach(r => { if(!have.has(String(r.id))) (S.ledger = S.ledger || []).push({ id:r.id, type:r.ty === 'out' ? 'out' : 'in', a:Number(r.a)||0, d:r.d||'', y:Number(r.y)||0, m:Number(r.m)||1, dd:Number(r.dd)||1, ts:Number(r.ts)||0, hh:r.hh == null ? null : Number(r.hh), mm:r.mm == null ? null : Number(r.mm) }); });
+          ledgerCloudOk = true;
+        }
+      }
+      if(ledgerCloudOk){
+        try{
+          const lRows = (S.ledger || []).map(x => ({ id:String(x.id), u, ty:x.type === 'out' ? 'out' : 'in', a:Math.trunc(Number(x.a)||0), d:x.d || '',
+            y:Math.trunc(Number(x.y)||0), m:Math.trunc(Number(x.m)||1), dd:Math.trunc(Number(x.dd)||1), ts:Math.trunc(Number(x.ts)||0),
+            hh: x.hh == null ? null : Math.trunc(Number(x.hh)), mm: x.mm == null ? null : Math.trunc(Number(x.mm)) }));
+          if(lRows.length){
+            const {error} = await supabaseClient.from('l').upsert(lRows, { onConflict:'id' });
+            if(error) throw error;
+          }
+          await deleteMissing('l', lRows);
+        }catch(e){
+          console.error('Ledger sync error:', e);
+          lastLedgerErr = (e && e.message) || String(e);
+          if(ledgerStrict) throw e;
+          if(!ledgerWarned){ ledgerWarned = true; showToast('دخل و خرج آنلاین ذخیره نشد؛ جدول l را در Supabase بسازید.'); }
+        }
+      }
     }while(cloudSyncAgain);
   }catch(e){ console.error('Supabase sync error:', e); return false; }
   finally{ cloudSyncing = false; }
@@ -543,7 +620,8 @@ let V = { view:'list', openId:null, custId:null, search:false, q:'' };
 let SUI = { curOpen:false };
 let CAL = { open:false, mode:'days', sel:{y:0,m:1,d:1}, vy:0, vm:1 };
 let LPSEL = null;     /* long-press selection: {key, view, kind, pid, cid, tid} */
-let LPJUST = false;   /* swallow the click that follows a long press */
+let LPJUST = false;
+let TXEXIT = 0;       /* time of the last tap that closed the ⋮ mode (a second tap right after is ignored) */   /* swallow the click that follows a long press */
 let LPT = null;
 
 /* ---------- back navigation (phone back button) ---------- */
@@ -556,6 +634,20 @@ function popOv(name){
   OV.splice(i, 1);
   IGN++;
   history.back();
+}
+/* leave the ⋮ mode (customer transaction or personal ledger row) and close any sheet opened from it */
+function endSel(swallow){
+  if(V.view === 'ledger' && typeof ledgerCapture === 'function') ledgerCapture();
+  if(LPSEL && LPSEL.kind === 'txmode') LPSEL = null;
+  LG.sel = null;
+  const drop = OV.filter(n => n === 'txmode' || n === 'lgsel' || n === 'sheet');
+  if(drop.length){
+    document.getElementById('ov').classList.add('hidden');
+    OV = OV.filter(n => !drop.includes(n));
+    IGN++; history.go(-drop.length);
+  }
+  if(swallow) TXEXIT = Date.now();
+  render();
 }
 /* go to another page; each page is a history step so the phone back button walks back one page at a time */
 /* soft generated tones: rising for entering a page, falling for going back */
@@ -610,6 +702,8 @@ window.addEventListener('popstate', e => {
     const top = OV.pop();
     if(top === 'portal'){ closePortal(); return; }
     if(top === 'tclk'){ hideTclk(); return; }
+    if(top === 'txmode'){ LPSEL = null; render(); return; }
+    if(top === 'lgsel'){ if(V.view === 'ledger') ledgerCapture(); LG.sel = null; render(); return; }
     if(top === 'cal'){ CAL.open = false; calRender(); }
     else document.getElementById('ov').classList.add('hidden');
     return;
@@ -622,6 +716,7 @@ window.addEventListener('popstate', e => {
 
 /* after saving or deleting a transaction from the full page, go to the customers page */
 function afterTx(){
+  if(LPSEL && LPSEL.kind === 'txmode'){ endSel(true); return; }
   if(V.view === 'txEdit'){ closeSheet(); goTo({view:'cust', openId:V.openId, custId:V.custId}, true); return; }
   closeSheet(); render();
 }
@@ -683,6 +778,58 @@ function render(){
       <p class="hint" style="margin:0 4px 10px">برای طرف حساب‌های جدید. مبلغ هر طرف حساب را از ⋮ کنار نامش تغییر دهید.</p>
       <div class="opt-list">
         ${Object.keys(CURS).map(k => `<button class="opt ${(S.cur || 'toman') === k ? 'on' : ''}" data-a="cur" data-v="${k}"><span>${CURS[k]}</span><span class="tick">✓</span></button>`).join('')}
+      </div>`;
+    return;
+  }
+
+  if(V.view === 'ledger'){
+    if(!Array.isArray(S.ledger)) S.ledger = [];
+    const L = S.ledger.slice().sort((x, y) => (y.ts || 0) - (x.ts || 0));
+    const inc = L.filter(x => x.type === 'in').reduce((s, x) => s + x.a, 0);
+    const exp = L.filter(x => x.type === 'out').reduce((s, x) => s + x.a, 0);
+    const rest = inc - exp;
+    const LS = LGF === 'all' ? L : L.filter(x => x.type === LGF);
+    m.innerHTML = `<header class="top">
+        <button class="ic dots" data-a="ledgerMenu" aria-label="گزینه‌ها">⋮</button>
+        <h1>دخل و خرج</h1>
+        <span class="sp"></span>
+      </header>
+      <section class="cb-hero">
+        <div class="cb-lbl">${rest < 0 ? 'کسر شما' : 'موجودی شما'}</div>
+        <div class="cb-net ${rest > 0 ? 'cb-pos' : rest < 0 ? 'cb-neg' : ''}">${money(Math.abs(rest))}</div>
+        <div class="cb-cards">
+          <div class="cb-card"><span>دخل</span><b>${money(inc)}</b></div>
+          <div class="cb-card"><span>خرج</span><b>${money(exp)}</b></div>
+        </div>
+      </section>
+      <div class="sec-row" style="margin:18px 4px 8px">
+        <button type="button" class="live-btn" data-a="ledgerNew">+ ثبت دخل و خرج</button>
+        <div class="lg-filt">
+          <button data-a="lgFilter" data-v="all" class="${LGF === 'all' ? 'on' : ''}">همه</button>
+          <button data-a="lgFilter" data-v="out" class="r ${LGF === 'out' ? 'on' : ''}">خرج</button>
+          <button data-a="lgFilter" data-v="in" class="g ${LGF === 'in' ? 'on' : ''}">دخل</button>
+        </div>
+      </div>
+      ${LS.length ? LS.map(x => `
+        <div class="lg-row">
+          <div class="lg-main">
+            <b class="${x.type === 'in' ? 'cb-in' : 'cb-out'}">${x.type === 'in' ? 'دخل' : 'خرج'} ${money(x.a)}</b>
+            <span>${esc(x.d || 'بدون شرح')}</span>
+            <small>${jStr(x.y, x.m, x.dd)}${x.hh != null ? ' · ' + clockText(x.hh, x.mm || 0) : ''}</small>
+          </div>
+          <button class="lg-more" data-a="ledgerMore" data-id="${esc(x.id)}" aria-label="گزینه‌ها">⋮</button>
+        </div>
+        ${LG.sel === x.id ? `<div class="lg-acts">
+          <button data-a="ledgerEdit" data-id="${esc(x.id)}">ویرایش</button>
+          <button class="del" data-a="ledgerDel" data-id="${esc(x.id)}">حذف</button>
+        </div>` : ''}`).join('') : `<p class="hint" style="margin:8px 4px">${L.length ? 'تراکنشی در این بخش نیست.' : 'هنوز چیزی ثبت نشده است.'}</p>`}`;
+    return;
+  }
+
+  if(V.view === 'ledgerMenu'){
+    m.innerHTML = pageHead('دخل و خرج', 'ledger') + `
+      <div class="tx-page">
+        <button class="pbtn del cm-btn" data-a="ledgerDelAll">${ICON.trash}<span>حذف همه تراکنش‌ها</span></button>
       </div>`;
     return;
   }
@@ -788,8 +935,8 @@ function render(){
         <div class="net"><span>${num(bal)}</span><span>${curLabel()}</span></div>
         <div style="margin-top:8px;font-size:15px;font-weight:700;color:${bal > 0 ? '#fca5a5' : bal < 0 ? '#86efac' : '#fff'}">${bal > 0 ? `بدهی ${esc(c.n)}` : bal < 0 ? `طلب ${esc(c.n)}` : 'تسویه'}</div>
         <div class="mini-row">
-          <div class="mini"><span>گرفت مشتری</span><b>${money(debts)}</b></div>
-          <div class="mini"><span>پرداخت مشتری</span><b>${money(pays)}</b></div>
+          <div class="mini"><span class="mini-name" style="display:block;white-space:nowrap;overflow:hidden">گرفت: ${esc(c.n)}</span><b>${money(debts)}</b></div>
+          <div class="mini"><span class="mini-name" style="display:block;white-space:nowrap;overflow:hidden">پرداخت: ${esc(c.n)}</span><b>${money(pays)}</b></div>
         </div>
       </section>
       <div class="info" style="margin-top:14px;display:flex;align-items:center;gap:8px">
@@ -1345,6 +1492,7 @@ function partySection(p){
       </section>
       ${on ? `<div class="lp-acts hero-acts"><button class="lp-btn" data-a="lpEdit" data-k="party" data-p="${p.id}" aria-label="ویرایش">${ICON.edit}</button></div>` : ''}
     </div>
+    <div class="opt-list" style="margin:0 0 14px"><button class="opt" data-a="ledgerOpen"><span>دخل و خرج شخصی</span><span class="sub">${ICON.chev}</span></button></div>
     <div class="sec-row"><div class="sec-title">مشتریان</div><button class="live-btn" data-a="portalOpen">صورت حساب زنده</button></div>
     <div class="cq-wrap"><input id="cq" type="search" placeholder="جستجوی مشتری با نام یا شماره تلفن..." value="${esc(V.q)}"></div>
     <div class="list">
@@ -1830,9 +1978,9 @@ const SHEETS = {
 
       </div>`;
   },
-  confirmDel(act, name, p, c){
+  confirmDel(act, name, p, c, t){
     const isParty = act === 'party' || act === 'editParty';
-    const label = act === 'txs' ? 'حذف همه تراکنش‌ها' : act === 'party' ? 'حذف طرف حساب' : act === 'editParty' ? 'ادامه ویرایش' : 'حذف مشتری';
+    const label = act === 'tx' ? 'حذف تراکنش' : act === 'ledger' ? 'حذف' : act === 'ledgerAll' ? 'حذف همه تراکنش‌ها' : act === 'txs' ? 'حذف همه تراکنش‌ها' : act === 'party' ? 'حذف طرف حساب' : act === 'editParty' ? 'ادامه ویرایش' : 'حذف مشتری';
     const want = act === 'editParty' ? name : 'حذف';
     const hint = act === 'editParty'
       ? `برای ادامه، ${isParty ? 'اسم طرف حساب' : 'اسم مشتری'} را دقیقاً بنویسید:<br><b>${esc(name)}</b>`
@@ -1840,7 +1988,7 @@ const SHEETS = {
     return sheetHead(act === 'editParty' ? 'تأیید ویرایش' : 'تأیید حذف') + `
       <p class="hint">${hint}</p>
       <input id="del-name" data-exp="${esc(want)}" autocomplete="off">
-      <button class="btn danger" id="del-ok" disabled data-a="doDel" data-act="${act}" data-p="${p.id}" data-c="${c ? c.id : ''}">${label}</button>`;
+      <button class="btn danger" id="del-ok" disabled data-a="doDel" data-act="${act}" data-p="${p ? p.id : ''}" data-c="${c ? c.id : ''}" data-t="${t ? esc(t.id) : ''}">${label}</button>`;
   },
   partyAdd(){
     return sheetHead('افزودن طرف حساب') + `
@@ -1900,7 +2048,7 @@ const SHEETS = {
       <input type="hidden" id="f-hh" value="${hh}">
       <input type="hidden" id="f-mm" value="${mm}">
       <button class="btn pri-btn" data-a="saveTx" data-p="${p.id}" data-c="${c.id}" ${t ? `data-t="${t.id}"` : ''}>${editing ? 'ثبت ویرایش' : 'ثبت تراکنش'}</button>
-      ${editing ? `<button class="btn danger" data-a="delTx" data-p="${p.id}" data-c="${c.id}" data-t="${t.id}">حذف این تراکنش</button>` : ''}`;
+      ${editing ? `<button class="btn danger" data-a="askDel" data-act="tx" data-p="${p.id}" data-c="${c.id}" data-t="${t.id}">حذف این تراکنش</button>` : ''}`;
   }
 };
 
@@ -2053,7 +2201,52 @@ async function phoneTakenElsewhere(ph){
 }
 /* ---------- customer portal (read-only, code only) ---------- */
 let PORTAL = { code:'', phone:'', err:'', busy:false, data:null };
+let LGBUSY = false;
+let LGF = 'all';   /* ledger filter: all | out | in */
+let LG = { type:'in', amt:'', desc:'', date:'', hh:'', mm:'', err:'', editId:null, sel:null };
+function ledgerCapture(){
+  const g = id => document.getElementById(id);
+  if(g('f-amount')) LG.amt = latin(g('f-amount').value).replace(/\D/g, '');
+  if(g('f-desc')) LG.desc = g('f-desc').value;
+  if(g('f-date')) LG.date = g('f-date').value;
+  if(g('f-hh')) LG.hh = g('f-hh').value;
+  if(g('f-mm')) LG.mm = g('f-mm').value;
+}
+function ledgerFormHTML(){
+  const ampm = LG.hh === '' || LG.hh == null ? '' : LG.hh;
+  const amtShow = LG.amt ? Number(LG.amt).toLocaleString('en-US') : '';
+  return sheetHead(LG.editId ? 'ویرایش دخل و خرج' : 'ثبت دخل و خرج') + `
+      <label>نوع</label>
+      <div class="tbtns">
+        <button type="button" class="tbtn g ${LG.type === 'in' ? 'on' : ''}" data-a="ledgerType" data-v="in">دخل</button>
+        <button type="button" class="tbtn r ${LG.type === 'out' ? 'on' : ''}" data-a="ledgerType" data-v="out">خرج</button>
+      </div>
+      <label for="f-amount">مبلغ (${curLabel()})</label>
+      <input id="f-amount" class="money" inputmode="numeric" placeholder="0" value="${amtShow}">
+      <label for="f-desc">شرح</label>
+      <input id="f-desc" maxlength="120" value="${esc(LG.desc)}">
+      <label>تاریخ و ساعت</label>
+      <div class="dt-row">
+        <button type="button" class="dbtn" data-a="calOpen"><span id="dtxt">${esc(LG.date)}</span><span class="cal-ic">${ICON.cal}</span></button>
+        <button type="button" class="dbtn" data-a="timeOpen"><span id="ttxt">${ampm === '' ? 'انتخاب ساعت' : clockText(ampm, LG.mm === '' || LG.mm == null ? 0 : LG.mm)}</span><span class="cal-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span></button>
+      </div>
+      <input type="hidden" id="f-date" value="${esc(LG.date)}">
+      <input type="hidden" id="f-hh" value="${ampm}">
+      <input type="hidden" id="f-mm" value="${LG.mm == null ? '' : LG.mm}">
+      <p class="hint" id="lg-err" style="color:var(--neg);margin:4px 2px"></p>
+      <button class="btn pri-btn" data-a="ledgerSave">${LG.editId ? 'ثبت ویرایش' : 'ثبت'}</button>`;
+}
+function ledgerFresh(){ return { type:'in', amt:'', desc:'', date:todayStr(), hh:new Date().getHours(), mm:new Date().getMinutes(), err:'', editId:null, sel:null }; }
+const CB_MONTHS = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
 const PORTAL_PHONE_KEY = 'hisab_portal_phone';
+function fitMiniNames(){
+  document.querySelectorAll('.mini-name').forEach(el => {
+    el.style.fontSize = '';
+    let fs = parseFloat(getComputedStyle(el).fontSize) || 14;
+    while(el.scrollWidth > el.clientWidth + 1 && fs > 8){ fs -= 0.5; el.style.fontSize = fs + 'px'; }
+  });
+}
+new MutationObserver(() => fitMiniNames()).observe(document, { childList: true, subtree: true });
 function portalOwnerView(){ return !!(S.loggedIn && cloudUser); }
 function savedPortalPhone(){ try{ return localStorage.getItem(PORTAL_PHONE_KEY) || ''; }catch(e){ return ''; } }
 function savePortalPhone(p){ try{ localStorage.setItem(PORTAL_PHONE_KEY, p); }catch(e){} }
@@ -2110,7 +2303,7 @@ function renderPortal(){
     const bal = txs.reduce((s, t) => s + (Number(t.a) || 0), 0);
     const got = txs.filter(t => Number(t.a) > 0).reduce((s, t) => s + Number(t.a), 0);
     const paid = txs.filter(t => Number(t.a) < 0).reduce((s, t) => s - Number(t.a), 0);
-    const status = bal > 0 ? `بدهی ${nm}` : bal < 0 ? `طلب ${nm}` : 'تسویه';
+    const status = bal > 0 ? 'بدهکار است' : bal < 0 ? 'طلب دارد' : 'تسویه';
     const rows = txs.length
       ? txs.map(t => `
         <div class="card tx-card" style="cursor:default"><span class="nm tx-nm"><b>${esc(t.d || 'بدون شرح')}</b><small>${jStr(t.y, t.m, t.dd)}${t.hh != null ? ' · ' + clockText(Number(t.hh), Number(t.mm) || 0) : ''}</small></span><span class="bal ${balCls(Number(t.a) || 0)}">${money(Number(t.a) || 0)}</span></div>`).join('')
@@ -2124,10 +2317,10 @@ function renderPortal(){
         </div>
         <section class="hero">
           <div class="lbl">صورت حساب: ${nm}</div>
-          <div class="net"><span>${num(bal)}</span><span>${curLabel()}</span><small style="color:${bal > 0 ? '#fca5a5' : bal < 0 ? '#86efac' : '#fff'};font-weight:700">${status}</small></div>
+          <div class="net"><span>${num(bal)}</span><span>${curLabel()}</span><small style="color:${bal !== 0 ? '#1e7a4c' : '#fff'};font-weight:500;font-size:20px;line-height:1.4;margin-top:6px;display:block">${status}</small></div>
           <div class="mini-row">
-            <div class="mini"><span>گرفت ${nm}</span><b>${money(got)}</b></div>
-            <div class="mini"><span>پرداخت ${nm}</span><b>${money(paid)}</b></div>
+            <div class="mini"><span class="mini-name" style="display:block;white-space:nowrap;overflow:hidden">گرفت: ${nm}</span><b>${money(got)}</b></div>
+            <div class="mini"><span class="mini-name" style="display:block;white-space:nowrap;overflow:hidden">پرداخت: ${nm}</span><b>${money(paid)}</b></div>
           </div>
         </section>
         <div class="sec-title">تراکنش‌ها</div>
@@ -2312,7 +2505,12 @@ document.addEventListener('click', async e => {
   if(e.target.id === 'tclk'){ if(!TC_JUST) closeTclk(); return; }
   if(e.target.id === 'ov'){ closeSheet(); return; }
   if(LPJUST){ LPJUST = false; return; }
-  if(LPSEL && !e.target.closest('.lp-acts, .p-acts')){ LPSEL = null; render(); return; }
+  if(Date.now() - TXEXIT < 350) return;
+  if(!e.target.closest('#ov, #cal, #tclk')){
+    if(LPSEL && LPSEL.kind === 'txmode' && !e.target.closest('.p-acts')){ endSel(true); return; }
+    if(LG.sel && V.view === 'ledger' && !e.target.closest('.lg-acts, .lg-more')) endSel();
+  }
+  if(LPSEL && LPSEL.kind !== 'txmode' && !e.target.closest('.lp-acts, .p-acts')){ LPSEL = null; render(); return; }
   const el = e.target.closest('[data-a]');
   if(!el) return;
   const a = el.dataset.a;
@@ -2323,6 +2521,72 @@ document.addEventListener('click', async e => {
   switch(a){
     case 'menu': goTo({view:'menu'}); break;
     case 'openSettings': SUI.curOpen = false; goTo({view:'settings'}); break;
+    case 'ledgerOpen': LG = { type:'in', amt:'', desc:'', date:todayStr(), hh:new Date().getHours(), mm:new Date().getMinutes(), err:'', editId:null, sel:null }; goTo({view:'ledger'}); break;
+    case 'ledgerMenu': goTo({view:'ledgerMenu'}); break;
+    case 'lgFilter': LGF = el.dataset.v; render(); break;
+    case 'ledgerDelAll': openSheet(SHEETS.confirmDel('ledgerAll', '', null, null, null)); break;
+    case 'ledgerNew': LG = ledgerFresh(); openSheet(ledgerFormHTML()); break;
+    case 'ledgerType':
+      ledgerCapture(); LG.type = el.dataset.v; LG.err = '';
+      document.querySelectorAll('#sheet .tbtn').forEach(b => b.classList.toggle('on', b === el));
+      break;
+    case 'ledgerSave': {
+      ledgerCapture();
+      const amt = Math.trunc(Number(LG.amt) || 0);
+      if(!amt){ const le = document.getElementById('lg-err'); if(le) le.textContent = 'مبلغ را وارد کنید.'; const fa = document.getElementById('f-amount'); if(fa) fa.focus(); break; }
+      const dt = parseDate(LG.date) || today();
+      if(!Array.isArray(S.ledger)) S.ledger = [];
+      const lgFields = { type: LG.type, a: amt, d: LG.desc.trim(),
+        y: dt.y, m: dt.m, dd: dt.d,
+        hh: LG.hh === '' || LG.hh == null ? null : Number(LG.hh),
+        mm: LG.mm === '' || LG.mm == null ? null : Number(LG.mm) };
+      if(LGBUSY) break;
+      LGBUSY = true;
+      el.classList.add('busy');
+      const lgEditId = LG.editId, lgNewId = uid(), lgNow = Date.now();
+      const lgWasEdit = !!(lgEditId && S.ledger.find(x => x.id === lgEditId));
+      lastLedgerErr = ''; ledgerStrict = true;
+      let lgOk = false;
+      try{
+        lgOk = await commitWrite(() => {
+          if(!Array.isArray(S.ledger)) S.ledger = [];
+          const o = lgEditId ? S.ledger.find(x => x.id === lgEditId) : null;
+          if(o) Object.assign(o, lgFields);
+          else S.ledger.push(Object.assign({ id: lgNewId, ts: lgNow }, lgFields));
+        }, null, null);
+      } finally { ledgerStrict = false; }
+      LGBUSY = false; el.classList.remove('busy');
+      if(!lgOk){
+        if(lastLedgerErr) showToast('ذخیره آنلاین دخل و خرج ناموفق: ' + lastLedgerErr);
+        break;
+      }
+      showToast(lgWasEdit ? 'ویرایش با موفقیت ثبت شد' : 'تراکنش با موفقیت ثبت شد', true);
+      playBell();
+      LG = ledgerFresh();
+      closeSheet(); render(); break;
+    }
+    case 'ledgerMore': {
+      if(LG.sel === el.dataset.id){ endSel(); break; }
+      const had = !!LG.sel;
+      ledgerCapture(); LG.sel = el.dataset.id;
+      if(!had) pushOv('lgsel');
+      render(); break;
+    }
+    case 'ledgerEdit': {
+      const x = (S.ledger || []).find(r => r.id === el.dataset.id);
+      if(!x) break;
+      LG = { type:x.type, amt:String(x.a), desc:x.d || '', date:jStr(x.y, x.m, x.dd),
+        hh:x.hh == null ? '' : x.hh, mm:x.mm == null ? '' : x.mm, err:'', editId:x.id, sel:null };
+      popOv('lgsel');
+      render();
+      setTimeout(() => openSheet(ledgerFormHTML()), 150); break;
+    }
+    case 'ledgerCancel':
+      LG = { type:'in', amt:'', desc:'', date:todayStr(), hh:new Date().getHours(), mm:new Date().getMinutes(), err:'', editId:null, sel:null };
+      render(); break;
+    case 'ledgerDel':
+      openSheet(SHEETS.confirmDel('ledger', '', null, null, { id: el.dataset.id }));
+      break;
     case 'close': closeSheet(); break;
     case 'search': V.search = !V.search; if(!V.search) V.q = ''; render(); break;
     case 'selParty':
@@ -2353,17 +2617,16 @@ document.addEventListener('click', async e => {
     /* long-press actions */
     case 'lpEdit': {
       const k = el.dataset.k;
-      LPSEL = null;
+      if(!(k === 'tx' && LPSEL && LPSEL.kind === 'txmode')) LPSEL = null;
       if(k === 'party'){ const pp = findParty(el.dataset.p); render(); openSheet(SHEETS.partyEdit(pp)); }
       else if(k === 'cust'){ render(); openSheet(SHEETS.custEdit(p, c)); }
-      else if(k === 'tx'){ render(); openSheet(SHEETS.txForm(p, c, t)); }
+      else if(k === 'tx'){ openSheet(SHEETS.txForm(p, c, t)); }
       break;
     }
     case 'lpDel':
-      if(t && confirm('این تراکنش حذف شود؟')){
-        await commitWrite(() => { c.tx = c.tx.filter(x => x.id !== t.id); }, 'تراکنش حذف شد', el);
-      }
-      LPSEL = null; render(); break;
+      if(t) openSheet(SHEETS.confirmDel('tx', c.n, p, c, { id: t.id }));
+      else { LPSEL = null; render(); }
+      break;
 
         case 'lkKey':
       if(LK.buf.length < lkMax() && !LK.busy){ LK.buf += el.dataset.v; LK.err = ''; }
@@ -2446,14 +2709,39 @@ document.addEventListener('click', async e => {
       const name = act === 'party' ? (p && p.n) : (c && c.n);
       /* deleting a party from its edit sheet */
       if(!name) return;
-      openSheet(SHEETS.confirmDel(act, name, p, c));
+      openSheet(SHEETS.confirmDel(act, name, p, c, t ? { id: t.id } : null));
       break;
     }
     case 'doDel': {
       const act = el.dataset.act;
-      const target = (act === 'party' || act === 'editParty') ? p : c;
+      const target = (act === 'ledger' || act === 'ledgerAll') ? {} : (act === 'party' || act === 'editParty') ? p : c;
       const want = act === 'editParty' ? target.n : 'حذف';
       if(!target || val('del-name').trim() !== want) return;
+      if(act === 'ledgerAll'){
+        lastLedgerErr = ''; ledgerStrict = true;
+        let aOk = false;
+        try{ aOk = await commitWrite(() => { S.ledger = []; }, 'همه تراکنش‌های دخل و خرج حذف شد', null); }
+        finally{ ledgerStrict = false; }
+        if(!aOk){ if(lastLedgerErr) showToast('حذف آنلاین ناموفق: ' + lastLedgerErr); return; }
+        LG = ledgerFresh(); LGF = 'all';
+        V = { view:'ledger' }; history.replaceState({v:V}, '');
+        closeSheet(); render(); return;
+      }
+      if(act === 'ledger'){
+        const lgDelId = el.dataset.t;
+        lastLedgerErr = ''; ledgerStrict = true;
+        let dOk = false;
+        try{ dOk = await commitWrite(() => { S.ledger = (S.ledger || []).filter(x => x.id !== lgDelId); }, 'حذف شد', null); }
+        finally{ ledgerStrict = false; }
+        if(!dOk){ if(lastLedgerErr) showToast('حذف آنلاین ناموفق: ' + lastLedgerErr); return; }
+        if(LG.editId === lgDelId) LG.editId = null;
+        endSel(); return;
+      }
+      if(act === 'tx'){
+        const tid = el.dataset.t;
+        if(!await commitWrite(() => { c.tx = c.tx.filter(x => x.id !== tid); }, 'تراکنش حذف شد', el)) return;
+        afterTx(); return;
+      }
       if(act === 'editParty'){ openSheet(SHEETS.partyEdit(p)); return; }
       if(act === 'party'){
         if(!await commitWrite(() => { S.parties = S.parties.filter(x => x.id !== p.id); }, 'طرف حساب حذف شد', el)) return;
@@ -2563,9 +2851,8 @@ document.addEventListener('click', async e => {
 
     case 'addTx': openSheet(SHEETS.txForm(p, c)); break;
     case 'txMore':
-      goTo({view:'txEdit', openId:p.id, custId:c.id, txId:t.id}); break;
-    case 'txMoreOld':
       LPSEL = { key: `txmode:${p.id}:${c.id}:${t.id}`, view: V.view, kind: 'txmode', pid: p.id, cid: c.id, tid: t.id };
+      if(!OV.includes('txmode')) pushOv('txmode');
       render(); break;
 
     case 'setType': {
@@ -2649,10 +2936,7 @@ document.addEventListener('click', async e => {
       break;
     }
     case 'delTx':
-      if(confirm('این تراکنش حذف شود؟')){
-        const okDel = await commitWrite(() => { c.tx = c.tx.filter(x => x.id !== t.id); }, 'تراکنش حذف شد', el);
-        if(okDel) afterTx();
-      }
+      if(t) openSheet(SHEETS.confirmDel('tx', c.n, p, c, { id: t.id }));
       break;
   }
 });
