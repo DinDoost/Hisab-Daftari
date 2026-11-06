@@ -2947,6 +2947,9 @@ document.addEventListener('click', async e => {
     case 'calCancel':
       closeCal(); break;
     case 'calOk': {
+      /* use the year and month currently shown, keeping the chosen day (clamped to the month's length) */
+      const okD = Math.min(CAL.sel.d, daysIn(CAL.vy, CAL.vm));
+      CAL.sel = { y: CAL.vy, m: CAL.vm, d: okD };
       const s = jStr(CAL.sel.y, CAL.sel.m, CAL.sel.d);
       const f = document.getElementById('f-date'); if(f) f.value = s;
       const dt = document.getElementById('dtxt'); if(dt) dt.textContent = s;
