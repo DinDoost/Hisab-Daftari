@@ -135,6 +135,10 @@ input:focus,select:focus{outline:2px solid #a9cde8;border-color:transparent}
 .lg-filt button.on.g{background:#1e7a4c}
 .pt-sky{display:block;width:100%;margin:12px 0;padding:18px 16px;border:0;border-radius:16px;background:#bae6fd;color:#075985;font:inherit;font-weight:700;font-size:16px;text-align:right;cursor:pointer}
 .pt-link{background:none;border:0;color:#c62828;font:inherit;font-weight:700;font-size:16px;padding:12px;cursor:pointer}
+.info-h{font-size:20px;font-weight:800;color:#1f2937;margin:20px 0 8px}
+.info-h4{font-size:18px;font-weight:800;color:#1f2937;margin:16px 0 6px}
+.info-sub{font-size:16px;font-weight:700;color:#0369a1;margin:0 0 10px}
+.info-p{font-size:16px;line-height:2;color:#374151;margin:0 0 8px}
 .lg-bar{display:flex;gap:8px;align-items:center;margin:14px 0 0}
 .lg-bar input{flex:1;min-width:0;padding:11px 14px}
 .lg-fbtn{border:0;border-radius:14px;background:var(--soft);color:var(--deep);font:inherit;font-weight:700;font-size:14px;padding:11px 16px;cursor:pointer;flex:none}
@@ -722,6 +726,7 @@ window.addEventListener('popstate', e => {
   if(OV.length){
     const top = OV.pop();
     if(top === 'portal'){ closePortal(); return; }
+    if(top === 'info'){ infoHide(); return; }
     if(top === 'ptmenu'){ PORTAL.menu = false; PORTAL.setPin = false; renderPortal(); return; }
     if(top === 'tclk'){ hideTclk(); return; }
     if(top === 'txmode'){ LPSEL = null; render(); return; }
@@ -1630,6 +1635,71 @@ function recPending(){
   }catch(e){ return null; }
 }
 function lkMax(){ return LK.mode === 'verify' ? (LK.purpose === 'signup' ? 6 : 8) : 4; }
+/* ---------- app info panel (menu on the login screen) ---------- */
+const INFO_MAIL = 'janmohammaddindoost11@gamil.com';
+const INFO_WA = '989398869208';   /* کد ایران ۹۸ + شماره بدون صفر اول */
+function infoOpen(html){
+  let o = document.getElementById('infoOv');
+  if(!o){
+    o = document.createElement('div');
+    o.id = 'infoOv';
+    o.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(15,23,42,.45);display:flex;align-items:flex-end;justify-content:center';
+    o.addEventListener('click', e => { if(e.target === o) infoClose(); });
+    document.body.appendChild(o);
+  }
+  o.innerHTML = `<div style="background:#fff;width:100%;max-width:520px;max-height:88vh;overflow:auto;border-radius:22px 22px 0 0;padding:18px 20px calc(20px + env(safe-area-inset-bottom,0px));box-sizing:border-box">${html}</div>`;
+  o.style.display = 'flex';
+  if(!OV.includes('info')) pushOv('info');
+}
+function infoHide(){ const o = document.getElementById('infoOv'); if(o) o.style.display = 'none'; }
+function infoClose(){ infoHide(); if(OV.includes('info')) popOv('info'); }
+function infoHead(title){
+  return `<div class="sh-h"><span>${title}</span><button class="ic" data-a="infoClose" aria-label="بستن">${ICON.close}</button></div>`;
+}
+function infoMenu(){
+  infoOpen(infoHead('گزینه‌ها') + `
+    <div class="opt-list">
+      <button class="opt" data-a="infoAbout"><span>درباره نویسنده</span></button>
+      <a class="opt" href="mailto:${INFO_MAIL}"><span>ایمیل پشتیبان</span></a>
+      <a class="opt" href="https://wa.me/${INFO_WA}"><span>واتساپ پشتیبان</span></a>
+      <button class="opt" data-a="infoApp"><span>درباره برنامه</span></button>
+    </div>`);
+}
+function infoAbout(){
+  infoOpen(infoHead('درباره نویسنده') + `
+    <div class="info-body">
+      <h3 class="info-h">جان محمد دین دوست</h3>
+      <p class="info-p">جان محمد دین دوست، نویسنده و طراح این برنامه، با علاقه به تکنولوژی، نوآوری و ساده‌سازی امور روزمره، اقدام به طراحی و توسعه این سیستم حسابداری آنلاین نموده است.</p>
+      <p class="info-p">دیدگاه او این است که تکنولوژی باید زندگی و کار مردم را آسان‌تر کند و امکاناتی را در اختیار آنان قرار دهد که باعث صرفه‌جویی در وقت، نظم بیشتر و دسترسی آسان‌تر به اطلاعات شود.</p>
+      <p class="info-p">این برنامه حاصل تلاش، خلاقیت و علاقه به ساخت ابزاری کاربردی برای مدیریت بهتر امور مالی است.</p>
+    </div>`);
+}
+function infoApp(){
+  const feats = [
+    ['۱. مدیریت طرف‌حساب‌ها و مشتریان', 'امکان ثبت، ویرایش، جستجو و مدیریت طرف‌حساب‌ها و مشتریان در یک محیط منظم و ساده.'],
+    ['۲. ثبت تصاویر مشتریان', 'برای هر مشتری می‌توان عکس جداگانه اضافه کرد تا شناسایی و مدیریت مشتریان آسان‌تر شود.'],
+    ['۳. پشتیبانی از دو واحد پولی', 'امکان ثبت و مدیریت حساب‌ها با دو واحد پولی تومان و افغانی، متناسب با نیاز کاربر.'],
+    ['۴. مشاهده آنلاین صورت‌حساب توسط مشتری', 'مشتری برای اطلاع از وضعیت حساب خود نیازی به تماس یا مراجعه به حسابدار ندارد. با شماره موبایل و کد چهار رقمی اختصاصی خود، صورت‌حساب و تراکنش‌های خودش را از گوشی ببیند.'],
+    ['۵. تعیین رمز چهار رقمی برای مشتریان', 'حسابدار می‌تواند برای هر مشتری رمز چهار رقمی جداگانه تعیین کند تا دسترسی به صورت‌حساب آنلاین با اطلاعات ورود اختصاصی انجام شود.'],
+    ['۶. صفحه اختصاصی دخل‌وخرج', 'امکان ثبت و بررسی درآمدها و هزینه‌ها در یک بخش جداگانه برای مدیریت بهتر امور مالی.'],
+    ['۷. جستجوی پیشرفته تراکنش‌ها', 'امکان جستجوی تراکنش‌ها براساس شرح و توضیحات ثبت‌شده، برای پیدا کردن سریع اطلاعات موردنظر.'],
+    ['۸. فیلتر و دسته‌بندی تراکنش‌ها', 'با استفاده از فیلترهای مختلف می‌توان تراکنش‌ها را منظم کرد و موارد موردنظر را سریع‌تر پیدا و بررسی کرد.'],
+    ['۹. ذخیره‌سازی آنلاین اطلاعات', 'اطلاعات حسابداری به‌صورت آنلاین ذخیره می‌شوند تا کاربر بتواند از طریق اتصال به اینترنت به اطلاعات خود دسترسی داشته باشد.'],
+    ['۱۰. امکانات کاربردی دیگر', 'برنامه امکانات متنوع دیگری برای مدیریت بهتر حساب‌ها، ثبت معاملات، پیگیری بدهی‌ها و طلب‌ها و دسترسی آسان به اطلاعات مالی فراهم کرده است.']
+  ].map(([t, d]) => `<h4 class="info-h4">${t}</h4><p class="info-p">${d}</p>`).join('');
+  infoOpen(infoHead('درباره برنامه') + `
+    <div class="info-body">
+      <h3 class="info-h">معرفی برنامه حسابداری آنلاین</h3>
+      <p class="info-sub">حسابداری هوشمند، دقیق و همیشه در دسترس</p>
+      <p class="info-p">این برنامه یک سیستم حسابداری آنلاین و پیشرفته است که با هدف ساده‌سازی امور مالی، مدیریت حساب مشتریان و ثبت دقیق دخل‌وخرج طراحی شده است.</p>
+      <p class="info-p">در دنیای امروز که سرعت و دسترسی آسان به اطلاعات اهمیت زیادی دارد، این برنامه تلاش می‌کند تا مدیریت حساب‌ها را آسان‌تر، منظم‌تر و شفاف‌تر سازد؛ به‌گونه‌ای که حسابدار و مشتری بتوانند در هر زمان و از هر مکان به اطلاعات موردنیاز خود دسترسی داشته باشند.</p>
+      <h3 class="info-h">امکانات و قابلیت‌های برنامه</h3>
+      ${feats}
+      <h3 class="info-h">هدف و دیدگاه سازنده برنامه</h3>
+      <p class="info-p">هدف از طراحی این برنامه، ایجاد یک محیط حسابداری ساده، دقیق و قابل‌اعتماد است تا کاربران بتوانند بدون پیچیدگی‌های سیستم‌های حسابداری سنتی، امور مالی خود را مدیریت کنند.</p>
+      <p class="info-p">یکی از اهداف مهم این برنامه، ایجاد ارتباط آسان‌تر و شفاف‌تر میان حسابدار و مشتری است؛ به‌طوری‌که مشتری بتواند بدون نیاز به پرس‌وجو از حسابدار، در هر زمان از وضعیت حساب خود آگاه شود.</p>
+    </div>`);
+}
 function renderLock(){
   const el = document.getElementById('lock');
   if(!LK.locked){ el.classList.add('hidden'); el.innerHTML = ''; return; }
@@ -1640,6 +1710,7 @@ function renderLock(){
     const ARROW = '<svg viewBox="0 0 24 24"><path d="M20 12H4M10 6l-6 6 6 6"/></svg>';
     el.innerHTML = `
     <div class="su-wrap">
+      <div style="align-self:stretch;display:flex;justify-content:flex-start;margin:-8px 0 0"><button class="ic dots" data-a="infoMenu" aria-label="گزینه‌ها" style="font-size:26px">⋮</button></div>
       <div class="lk-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4.5-6 8-6s7 2 8 6"/></svg></div>
       <h1 class="su-h">${heads[0]}</h1>
       <p class="su-p">${heads[1]}</p>
@@ -3205,6 +3276,10 @@ document.addEventListener('click', async e => {
     case 'ptPinSave': ptPinSave(); break;
     case 'ptExit': ptExit(); break;
     case 'ptForget': ptForget(); break;
+    case 'infoMenu': infoMenu(); break;
+    case 'infoAbout': infoAbout(); break;
+    case 'infoApp': infoApp(); break;
+    case 'infoClose': infoClose(); break;
     case 'portalForgetPin': portalForgetPin(); break;
     case 'portalForgetPhone':
       clearPortalPhone(); PORTAL.err = ''; renderPortal(); break;
