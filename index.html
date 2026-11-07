@@ -2,7 +2,7 @@
 <html lang="fa" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#3a8bc2">
 <title>حساب دفتری</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -133,6 +133,8 @@ input:focus,select:focus{outline:2px solid #a9cde8;border-color:transparent}
 .lg-filt button.on{background:var(--pri);color:#fff}
 .lg-filt button.on.r{background:#c0392b}
 .lg-filt button.on.g{background:#1e7a4c}
+.pt-sky{display:block;width:100%;margin:12px 0;padding:18px 16px;border:0;border-radius:16px;background:#bae6fd;color:#075985;font:inherit;font-weight:700;font-size:16px;text-align:right;cursor:pointer}
+.pt-link{background:none;border:0;color:#c62828;font:inherit;font-weight:700;font-size:16px;padding:12px;cursor:pointer}
 .lg-bar{display:flex;gap:8px;align-items:center;margin:14px 0 0}
 .lg-bar input{flex:1;min-width:0;padding:11px 14px}
 .lg-fbtn{border:0;border-radius:14px;background:var(--soft);color:var(--deep);font:inherit;font-weight:700;font-size:14px;padding:11px 16px;cursor:pointer;flex:none}
@@ -154,6 +156,7 @@ input:focus,select:focus{outline:2px solid #a9cde8;border-color:transparent}
 .tc-ampm{display:flex;justify-content:center;gap:10px;margin-bottom:8px}
 .tc-ampm button{border:0;background:#eef3f8;color:var(--text);border-radius:12px;padding:8px 12px;font:inherit;font-size:14px;cursor:pointer}
 .tc-ampm button.on{background:var(--pri);color:#fff}
+html,body{touch-action:pan-x pan-y;-ms-touch-action:pan-x pan-y}
 .tc-face{display:block;width:260px;max-width:100%;height:auto;margin:0 auto;touch-action:none;cursor:pointer}
 .tc-face .face{fill:#f1f6fb}
 .tc-face text{font-size:15px;fill:var(--text);font-family:inherit;user-select:none}
@@ -719,6 +722,7 @@ window.addEventListener('popstate', e => {
   if(OV.length){
     const top = OV.pop();
     if(top === 'portal'){ closePortal(); return; }
+    if(top === 'ptmenu'){ PORTAL.menu = false; PORTAL.setPin = false; renderPortal(); return; }
     if(top === 'tclk'){ hideTclk(); return; }
     if(top === 'txmode'){ LPSEL = null; render(); return; }
     if(top === 'lgsel'){ if(V.view === 'ledger') ledgerCapture(); LG.sel = null; render(); return; }
@@ -2520,6 +2524,96 @@ function portalOwnerView(){ return !!(S.loggedIn && cloudUser); }
 function savedPortalPhone(){ try{ return localStorage.getItem(PORTAL_PHONE_KEY) || ''; }catch(e){ return ''; } }
 function savePortalPhone(p){ try{ localStorage.setItem(PORTAL_PHONE_KEY, p); }catch(e){} }
 function clearPortalPhone(){ try{ localStorage.removeItem(PORTAL_PHONE_KEY); }catch(e){} }
+/* ---------- remembered customer session (this device only) ---------- */
+const PORTAL_REM_KEY = 'hisab_portal_rem';
+let PORTAL_SESS = null;   /* {phone, code} while this customer is unlocked in this run */
+function loadRem(){ try{ return JSON.parse(localStorage.getItem(PORTAL_REM_KEY) || 'null'); }catch(e){ return null; } }
+function saveRem(r){ try{ localStorage.setItem(PORTAL_REM_KEY, JSON.stringify(r)); }catch(e){} }
+function clearRem(){ try{ localStorage.removeItem(PORTAL_REM_KEY); }catch(e){} }
+function pinHash(salt, code){
+  const str = salt + '|' + code;
+  let h = 2166136261;
+  for(let i = 0; i < str.length; i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  return h.toString(16);
+}
+function portalPinOn(){ const r = loadRem(); return !!(r && r.mode === 'pin'); }
+function rememberPortal(phone, code, data){
+  PORTAL_SESS = { phone, code };
+  saveRem({ phone, mode:'auto', code, data: data || null });
+}
+function updRemData(data){ const r = loadRem(); if(r){ r.data = data; saveRem(r); } }
+async function portalFetch(phone, code){
+  if(!supabaseClient) return { err: 'اتصال برقرار نیست.' };
+  const { data, error } = await supabaseClient.rpc('customer_portal', { p_code: code, p_phone: phone });
+  if(error){
+    const m = String(error.message || '');
+    return { invalid: m.includes('invalid'), err: m.includes('locked') ? 'به‌دلیل تلاش‌های زیاد، ۱۵ دقیقه بعد دوباره امتحان کنید.'
+      : m.includes('invalid') ? 'شماره موبایل یا کد وارد شده درست نیست.' : 'ورود انجام نشد: ' + m };
+  }
+  return { data };
+}
+async function refreshRemembered(r){
+  const res = await portalFetch(r.phone, r.code);
+  if(res.data){ PORTAL.data = res.data; updRemData(res.data); renderPortal(); return; }
+  if(res.invalid){
+    clearRem(); PORTAL_SESS = null;
+    PORTAL = { code:'', phone: r.phone, err: res.err, busy:false, data:null, lock:null };
+    renderPortal();
+  }
+}
+function portalLogoutNow(){
+  const r = loadRem();
+  const ph = (r && r.phone) || PORTAL.phone || savedPortalPhone() || '';
+  clearRem(); PORTAL_SESS = null;
+  PORTAL = { code:'', phone: ph, err:'', busy:false, data:null, lock:null };
+  renderPortal();
+}
+function portalPinToggle(){
+  const r = loadRem(); if(!r) return;
+  if(r.mode === 'pin'){
+    if(!PORTAL_SESS){ portalLogoutNow(); return; }
+    saveRem({ phone: r.phone, mode:'auto', code: PORTAL_SESS.code, data: r.data || null });
+  } else {
+    const salt = Math.random().toString(36).slice(2, 10);
+    saveRem({ phone: r.phone, mode:'pin', salt, ph: pinHash(salt, r.code), data: r.data || null });
+  }
+  renderPortal();
+}
+function portalForgetPin(){
+  const r = loadRem();
+  PORTAL.lock = null; PORTAL.menu = false; PORTAL.setPin = false; PORTAL.data = null; PORTAL.err = '';
+  PORTAL.phone = (r && r.phone) || savedPortalPhone() || ''; PORTAL.code = '';
+  renderPortal();
+}
+function ptForget(){
+  PORTAL.menu = false;
+  if(OV.includes('ptmenu')) popOv('ptmenu');
+  portalForgetPin();
+}
+function ptExit(){
+  PORTAL.menu = false; PORTAL.setPin = false;
+  if(OV.includes('ptmenu')) popOv('ptmenu');
+  portalLogoutNow();
+}
+function ptPinSave(){
+  const r = loadRem(); if(!r) return;
+  const code = latin(val('pt-newpin')).replace(/\D/g, '');
+  if(!/^[0-9]{4}$/.test(code)){ PORTAL.err = 'پین کود باید چهار رقمی باشد.'; return renderPortal(); }
+  const salt = Math.random().toString(36).slice(2, 10);
+  saveRem({ phone: r.phone, mode:'pin', salt, ph: pinHash(salt, code), data: r.data || null });
+  PORTAL.setPin = false; PORTAL.menu = false; PORTAL.err = ''; PORTAL.note = 'پین کود فعال شد';
+  if(OV.includes('ptmenu')) popOv('ptmenu');
+  renderPortal();
+}
+function portalPinOk(){
+  const r = loadRem(); if(!r || r.mode !== 'pin') return;
+  const code = latin(val('pt-pin')).replace(/\D/g, '');
+  if(!/^[0-9]{4}$/.test(code)){ PORTAL.err = 'کد ۴ رقمی را وارد کنید.'; return renderPortal(); }
+  if(pinHash(r.salt, code) !== r.ph){ PORTAL.err = 'کد وارد شده درست نیست.'; return renderPortal(); }
+  PORTAL = { code:'', phone: r.phone, err:'', busy:false, data: r.data || null, lock:null };
+  renderPortal();
+}
+
 function portalEl(){
   let el = document.getElementById('portal');
   if(!el){
@@ -2535,8 +2629,20 @@ function closePortal(){
   if(el){ el.classList.add('hidden'); el.innerHTML = ''; }
 }
 function openPortal(){
-  PORTAL = { code:'', phone:'', err:'', busy:false, data:null };
-  renderPortal();
+  PORTAL = { code:'', phone:'', err:'', busy:false, data:null, lock:null };
+  const r = loadRem();
+  if(r && r.mode === 'auto' && r.code){
+    PORTAL_SESS = { phone: r.phone, code: r.code };
+    PORTAL.phone = r.phone;
+    PORTAL.data = r.data || null;
+    renderPortal();
+    refreshRemembered(r);
+  } else if(r && r.mode === 'pin'){
+    PORTAL.lock = { phone: r.phone };
+    renderPortal();
+  } else {
+    renderPortal();
+  }
   if(!OV.includes('portal')) pushOv('portal');
 }
 function closePortalByUser(){
@@ -2553,6 +2659,42 @@ async function codeTakenElsewhere(ac){
 function renderPortal(){
   const el = portalEl();
   const LOCKSVG = '<svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10.5" rx="3"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></svg>';
+  if(PORTAL.setPin){
+    el.innerHTML = `
+      <div class="pt-wrap">
+        <div class="pt-top"><span class="sp"></span><h1>پین کود جدید</h1><button class="ic" data-a="ptSetBack" aria-label="برگشت">${ICON.back}</button></div>
+        <div class="fld"><span class="fi">${LOCKSVG}</span><div class="fw"><label for="pt-newpin">پین کود چهار رقمی</label><input id="pt-newpin" type="tel" dir="ltr" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="4" oninput="this.value=latin(this.value).replace(/[^0-9]/g,'').slice(0,4)"></div></div>
+        <div class="hint" style="min-height:22px;color:var(--neg)">${esc(PORTAL.err)}</div>
+        <button class="bottom-btn" data-a="ptPinSave">${ICON.check}<span>ذخیره</span></button>
+      </div>`;
+    el.classList.remove('hidden');
+    return;
+  }
+  if(PORTAL.menu){
+    const on = portalPinOn();
+    el.innerHTML = `
+      <div class="pt-wrap">
+        <div class="pt-top"><span class="sp"></span><h1>گزینه‌ها</h1><button class="ic" data-a="ptMenuBack" aria-label="برگشت">${ICON.back}</button></div>
+        ${on
+          ? '<button class="pt-sky" data-a="ptExit">غیرفعال کردن پین کود</button><button class="pt-sky" data-a="ptForget">پین را فراموش کردم</button>'
+          : '<button class="pt-sky" data-a="ptPinOn">فعال کردن پین کود</button>'}
+        <button class="pt-sky" data-a="ptExit">از حساب خود خارج شوید</button>
+      </div>`;
+    el.classList.remove('hidden');
+    return;
+  }
+  if(PORTAL.lock){
+    el.innerHTML = `
+      <div class="pt-wrap">
+        <div class="pt-top"><span class="sp"></span><h1>حساب مشتری</h1><span class="sp"></span></div>
+        <div class="fld"><span class="fi">${LOCKSVG}</span><div class="fw"><label for="pt-pin">کد ۴ رقمی</label><input id="pt-pin" type="tel" dir="ltr" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="4" oninput="this.value=latin(this.value).replace(/[^0-9]/g,'').slice(0,4)"></div></div>
+        <div class="hint" style="min-height:22px;color:var(--neg)">${esc(PORTAL.err)}</div>
+        <button class="bottom-btn" data-a="portalPinOk">${ICON.check}<span>باز کردن</span></button>
+        <p style="text-align:center;margin-top:14px"><button class="pt-link" data-a="portalForgetPin">فراموشی پین</button></p>
+      </div>`;
+    el.classList.remove('hidden');
+    return;
+  }
   if(!PORTAL.data){
     el.innerHTML = `
       <div class="pt-wrap">
@@ -2579,11 +2721,12 @@ function renderPortal(){
       : `<div class="empty">هنوز تراکنشی ثبت نشده.</div>`;
     el.innerHTML = `
       <div class="pt-wrap">
-        <div class="pt-top"><button class="ic" data-a="portalMenu" aria-label="گزینه‌ها"><span class="pt-dots">⋮</span></button><h1>${nm}</h1><button class="ic" data-a="portalClose" aria-label="بستن">${ICON.close}</button></div>
-        <div id="pt-menu" class="pt-menu hidden"><button class="pt-menu-b" data-a="portalLogout">خروج از حساب</button></div>
+        <div class="pt-top"><button class="ic" data-a="portalMenu" aria-label="گزینه‌ها"><span class="pt-dots">⋮</span></button><h1>${nm}</h1><button class="ic" data-a="portalClose" aria-label="برگشت">${ICON.back}</button></div>
+        
         <div class="pt-head">
           ${d.photo ? `<img class="pt-photo" src="${esc(d.photo)}" alt="">` : `<span class="pt-photo">${esc((d.name || '؟').charAt(0))}</span>`}
         </div>
+        ${PORTAL.note ? `<div class="hint" style="color:#0b4d2b;font-weight:700">${esc(PORTAL.note)}</div>` : ''}
         <section class="hero">
           <div class="lbl">صورت حساب: ${nm}</div>
           <div class="net"><span>${num(bal)}</span><span>${curLabel()}</span><small style="color:${bal > 0 ? '#c62828' : bal < 0 ? '#0b4d2b' : '#fff'};background:${bal !== 0 ? '#fff' : 'transparent'};font-weight:700;font-size:20px;line-height:1.4;margin-top:6px;display:inline-block;padding:${bal !== 0 ? '2px 14px' : '0'};border-radius:999px">${status}</small></div>
@@ -2630,6 +2773,7 @@ async function portalLogin(){
     return renderPortal();
   }
   savePortalPhone(phone);
+  rememberPortal(phone, code, data);
   PORTAL.data = data; PORTAL.err = ''; PORTAL.code = '';
   renderPortal();
 }
@@ -3054,12 +3198,20 @@ document.addEventListener('click', async e => {
       closePortalByUser(); break;
     case 'portalLogin':
       portalLogin(); break;
-    case 'portalMenu':
-      document.getElementById('pt-menu')?.classList.toggle('hidden'); break;
+    case 'portalMenu': PORTAL.menu = true; PORTAL.note = ''; pushOv('ptmenu'); renderPortal(); break;
+    case 'ptMenuBack': PORTAL.menu = false; renderPortal(); if(OV.includes('ptmenu')) popOv('ptmenu'); break;
+    case 'ptSetBack': PORTAL.setPin = false; PORTAL.menu = true; PORTAL.err = ''; renderPortal(); break;
+    case 'ptPinOn': PORTAL.menu = false; PORTAL.setPin = true; PORTAL.err = ''; renderPortal(); break;
+    case 'ptPinSave': ptPinSave(); break;
+    case 'ptExit': ptExit(); break;
+    case 'ptForget': ptForget(); break;
+    case 'portalForgetPin': portalForgetPin(); break;
     case 'portalForgetPhone':
       clearPortalPhone(); PORTAL.err = ''; renderPortal(); break;
     case 'portalLogout':
-      clearPortalPhone(); PORTAL = { code:'', phone:'', err:'', busy:false, data:null }; renderPortal(); break;
+      portalLogoutNow(); break;
+    case 'portalPinOk': portalPinOk(); break;
+    case 'portalPinToggle': portalPinToggle(); break;
     case 'pickPhoto':
       document.getElementById('photo-input')?.click(); break;
     case 'cropOk': {
