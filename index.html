@@ -46,8 +46,8 @@ input:focus,select:focus{outline:2px solid #a9cde8;border-color:transparent}
 .pos{color:var(--pos)}.neg{color:var(--neg)}.zero{color:var(--muted)}
 .bpos{color:#0d6b33;font-weight:700}
 .bneg{color:#c0392b;font-weight:700}
-.bal-col{display:flex;flex-direction:column;align-items:flex-start;gap:3px;flex:none}
-.bal-note{font-size:15px;font-weight:500;color:var(--muted);white-space:nowrap;line-height:1.4;letter-spacing:0}
+.bal-col{display:flex;flex-direction:column;align-items:center;gap:1px;flex:none;transform:translateY(-4px)}
+.bal-note{font-size:12px;font-weight:500;color:var(--muted);white-space:nowrap;line-height:1.3;letter-spacing:0}
 .cb-hero{background:linear-gradient(135deg,#4a9fd8,#2b6f9e);color:#fff;border-radius:22px;padding:22px 20px;margin:4px 0 16px;box-shadow:0 10px 24px rgba(43,111,158,.18)}
 .cb-lbl{font-size:14px;opacity:.85;font-weight:500}
 .cb-net{font-size:34px;font-weight:600;margin:6px 0 16px;letter-spacing:0}
@@ -133,6 +133,10 @@ input:focus,select:focus{outline:2px solid #a9cde8;border-color:transparent}
 .lg-filt button.on{background:var(--pri);color:#fff}
 .lg-filt button.on.r{background:#c0392b}
 .lg-filt button.on.g{background:#1e7a4c}
+.lg-bar{display:flex;gap:8px;align-items:center;margin:14px 0 0}
+.lg-bar input{flex:1;min-width:0;padding:11px 14px}
+.lg-fbtn{border:0;border-radius:14px;background:var(--soft);color:var(--deep);font:inherit;font-weight:700;font-size:14px;padding:11px 16px;cursor:pointer;flex:none}
+.lg-fbtn.on{background:var(--pri);color:#fff}
 .top .dots{font-size:24px;font-weight:700;line-height:1}
 .live-btn{border:0;border-radius:999px;background:var(--pri);color:#fff;font:inherit;font-size:14px;font-weight:700;padding:9px 18px;cursor:pointer;box-shadow:0 6px 16px rgba(58,139,194,.3)}
 .dt-row{display:flex;gap:14px;align-items:stretch}
@@ -798,11 +802,11 @@ function render(){
     const inc = L.filter(x => x.type === 'in').reduce((s, x) => s + x.a, 0);
     const exp = L.filter(x => x.type === 'out').reduce((s, x) => s + x.a, 0);
     const rest = inc - exp;
-    const LS = LGF === 'all' ? L : L.filter(x => x.type === LGF);
+    const LS = ledgerRows(L);
     m.innerHTML = `<header class="top">
         <button class="ic dots" data-a="ledgerMenu" aria-label="گزینه‌ها">⋮</button>
         <h1>دخل و خرج</h1>
-        <span class="sp"></span>
+        <button type="button" class="ic" data-a="ledgerShare" aria-label="اشتراک گذاری">${ICON.share}</button>
       </header>
       <section class="cb-hero">
         <div class="cb-lbl">${rest < 0 ? 'کسر شما' : 'موجودی شما'}</div>
@@ -812,8 +816,11 @@ function render(){
           <div class="cb-card"><span>خرج</span><b>${money(exp)}</b></div>
         </div>
       </section>
-      <div class="sec-row" style="margin:18px 4px 8px">
-        <button type="button" class="live-btn" data-a="ledgerNew">+ ثبت دخل و خرج</button>
+      <div class="lg-bar">
+        <button type="button" class="lg-fbtn${LGFR || LGTO ? ' on' : ''}" data-a="lgFilterOpen">فیلتر</button>
+        <input id="lgq" type="search" placeholder="جستجو در شرح..." value="${esc(LGQ)}">
+      </div>
+      <div class="sec-row" style="margin:12px 4px 8px">
         <div class="lg-filt">
           <button data-a="lgFilter" data-v="all" class="${LGF === 'all' ? 'on' : ''}">همه</button>
           <button data-a="lgFilter" data-v="out" class="r ${LGF === 'out' ? 'on' : ''}">خرج</button>
@@ -833,6 +840,7 @@ function render(){
           <button data-a="ledgerEdit" data-id="${esc(x.id)}">ویرایش</button>
           <button class="del" data-a="ledgerDel" data-id="${esc(x.id)}">حذف</button>
         </div>` : ''}`).join('') : `<p class="hint" style="margin:8px 4px">${L.length ? 'تراکنشی در این بخش نیست.' : 'هنوز چیزی ثبت نشده است.'}</p>`}`;
+    m.insertAdjacentHTML('beforeend', '<button type="button" class="fab" data-a="ledgerNew">+ ثبت دخل و خرج</button>');
     return;
   }
 
@@ -2230,6 +2238,196 @@ async function phoneTakenElsewhere(ph){
 let PORTAL = { code:'', phone:'', err:'', busy:false, data:null };
 let LGBUSY = false;
 let LGF = 'all';   /* ledger filter: all | out | in */
+let LGQ = '';      /* ledger search text */
+let LGFR = null, LGTO = null;   /* ledger date range {y,m,d} */
+function lgKey(o){ return o ? o.y * 10000 + o.m * 100 + o.d : null; }
+function ledgerRows(L){
+  const q = LGQ.trim().toLowerCase();
+  const fr = lgKey(LGFR), to = lgKey(LGTO);
+  return L.filter(x => {
+    if(LGF !== 'all' && x.type !== LGF) return false;
+    if(q && !String(x.d || '').toLowerCase().includes(q)) return false;
+    const k = x.y * 10000 + x.m * 100 + x.dd;
+    if(fr !== null && k < fr) return false;
+    if(to !== null && k > to) return false;
+    return true;
+  });
+}
+function lgFilterHTML(){
+  const lbl = o => o ? jStr(o.y, o.m, o.d) : 'انتخاب کنید';
+  return sheetHead('فیلتر دخل و خرج') + `
+      <label>از تاریخ</label>
+      <button type="button" class="dbtn" data-a="lgDate" data-v="from"><span id="lgf-from-t">${lbl(LGFR)}</span><span class="cal-ic">${ICON.cal}</span></button>
+      <label>تا تاریخ</label>
+      <button type="button" class="dbtn" data-a="lgDate" data-v="to"><span id="lgf-to-t">${lbl(LGTO)}</span><span class="cal-ic">${ICON.cal}</span></button>
+      <button type="button" class="btn pri-btn" data-a="lgFilterApply">تایید</button>
+      <button type="button" class="btn" style="background:var(--soft);color:var(--deep)" data-a="lgFilterClear">پاک کردن فیلتر</button>`;
+}
+function lgShareHTML(){
+  return sheetHead('اشتراک گذاری') + `
+      <div class="opt-list">
+        <button class="opt" data-a="lgShareAs" data-v="pdf"><span>اشتراک PDF</span></button>
+        <button class="opt" data-a="lgShareAs" data-v="img"><span>اشتراک به شکل عکس</span></button>
+        <button class="opt" data-a="lgShareAs" data-v="text"><span>خلاصه متنی</span></button>
+      </div>`;
+}
+function lgRowsForShare(){
+  const L = (S.ledger || []).slice().sort((x, y) => (y.ts || 0) - (x.ts || 0));
+  return ledgerRows(L);
+}
+function lgSums(rows){
+  const inc = rows.filter(x => x.type === 'in').reduce((s, x) => s + x.a, 0);
+  const exp = rows.filter(x => x.type === 'out').reduce((s, x) => s + x.a, 0);
+  return { inc, exp, rest: inc - exp };
+}
+function lgWhen(x){ return jStr(x.y, x.m, x.dd) + (x.hh != null ? ' ' + clockText(x.hh, x.mm || 0) : ''); }
+function lgSummaryText(rows){
+  const s = lgSums(rows);
+  const t = today();
+  return `دخل: ${money(s.inc)}\nخرج: ${money(s.exp)}\n${s.rest < 0 ? 'کسر' : 'موجودی'}: ${money(Math.abs(s.rest))}\nتاریخ: ${latinDate(t.y, t.m, t.d)}`;
+}
+async function lgText(rows){
+  const text = lgSummaryText(rows);
+  if(navigator.share){ try{ await navigator.share({ text }); return; }catch(e){ return; } }
+  try{ await navigator.clipboard.writeText(text); alert('متن خلاصه کپی شد.'); }
+  catch(e){ alert(text); }
+}
+function lgInvHTML(rows){
+  const s = lgSums(rows);
+  const t = today();
+  const rc = s.rest < 0 ? '#c0392b' : s.rest > 0 ? '#1e7a4c' : '#333';
+  const rl = s.rest < 0 ? 'کسر' : s.rest > 0 ? 'موجودی' : '';
+  const trs = rows.map((x, i) => `<tr>
+      <td>${i + 1}</td>
+      <td class="num">${Math.abs(x.a).toLocaleString('en-US')} ${curLabel()}</td>
+      <td style="color:${x.type === 'in' ? '#1e7a4c' : '#c0392b'}">${x.type === 'in' ? 'دخل' : 'خرج'}</td>
+      <td>${esc(lgWhen(x))}</td>
+      <td class="desc">${esc(x.d || 'بدون شرح')}</td>
+    </tr>`).join('');
+  return `<!DOCTYPE html><html dir="rtl" lang="fa"><head><meta charset="utf-8"><title>صورت دخل و خرج</title>
+  <style>
+    body{font-family:Vazirmatn,Tahoma,sans-serif;margin:0;padding:28px;color:#333;font-size:13px}
+    .name{text-align:right;font-size:14px;color:#555;padding-bottom:12px;border-bottom:1px solid #ddd}
+    .name b{color:#222;font-size:15px}
+    .sum{display:flex;justify-content:space-between;text-align:center;margin:18px 0 22px}
+    .sum span{display:block;color:#555;font-size:13px}
+    .sum b{display:block;margin-top:6px;font-size:15px;direction:ltr}
+    .sum small{font-size:12px;font-weight:400}
+    h3{font-size:15px;margin:0 0 10px;text-align:right}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    thead th{background:#2c5f8a;color:#fff;padding:9px 6px;font-weight:700}
+    td{border:1px solid #e1e1e1;padding:9px 6px;text-align:center}
+    td.desc{text-align:right;width:40%;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;line-height:1.7}
+    tr{page-break-inside:avoid}
+    td.num{direction:ltr;white-space:nowrap}
+    .foot{margin-top:28px;border-top:1px solid #ddd;padding-top:10px;text-align:right;color:#555;font-size:12px;line-height:1.9}
+    .foot b{color:#222;font-size:13px;direction:ltr;display:inline-block}
+  </style></head><body>
+  <div class="name">عنوان: <b>صورت دخل و خرج</b></div>
+  <div class="sum">
+    <div><span>مجموع دخل</span><b style="color:#1e7a4c">${money(s.inc)}</b></div>
+    <div><span>مجموع خرج</span><b style="color:#c0392b">${money(s.exp)}</b></div>
+    <div><span>مانده</span><b style="color:${rc}">${money(Math.abs(s.rest))} <small>${rl ? '(' + rl + ')' : ''}</small></b></div>
+  </div>
+  <h3>لیست تراکنش‌ها</h3>
+  <table>
+    <thead><tr><th>شماره</th><th>مبلغ</th><th>نوع</th><th>تاریخ</th><th>توضیح</th></tr></thead>
+    <tbody>${trs || '<tr><td colspan="5">تراکنشی ثبت نشده</td></tr>'}</tbody>
+  </table>
+  <div class="foot">تاریخ تولید گزارش<br><b>${latinDate(t.y, t.m, t.d)}</b><br>ساخته شده با حساب دفتری</div>
+  </body></html>`;
+}
+function lgPdf(rows){
+  const f = document.createElement('iframe');
+  f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+  document.body.appendChild(f);
+  const d = f.contentWindow.document;
+  d.open(); d.write(lgInvHTML(rows)); d.close();
+  setTimeout(() => {
+    try{ f.contentWindow.focus(); f.contentWindow.print(); }
+    catch(e){ alert('ذخیره PDF در این مرورگر پشتیبانی نمی‌شود.'); }
+    setTimeout(() => f.remove(), 1500);
+  }, 300);
+}
+async function lgImg(rows){
+  const s = lgSums(rows);
+  const font = 'Vazirmatn, Tahoma, sans-serif';
+  const W = 800, RH = 42, HH = 40, yH = 160;
+  const H = yH + HH + Math.max(1, rows.length) * RH + 80;
+  const Q = 2;
+  const cv = document.createElement('canvas');
+  cv.width = W * Q; cv.height = H * Q;
+  const x = cv.getContext('2d');
+  x.scale(Q, Q);
+  x.fillStyle = '#ffffff'; x.fillRect(0, 0, W, H);
+  x.textBaseline = 'middle';
+
+  x.textAlign = 'right'; x.fillStyle = '#1f2937';
+  x.font = `bold 22px ${font}`; x.fillText('صورت دخل و خرج', W - 40, 40);
+  x.fillStyle = '#dfe3ea'; x.fillRect(40, 64, W - 80, 1.5);
+
+  const SC = { inc: W - 130, exp: W - 400, rest: W - 660 };
+  x.textAlign = 'center';
+  x.font = `bold 14px ${font}`; x.fillStyle = '#374151';
+  x.fillText('مجموع دخل', SC.inc, 100);
+  x.fillText('مجموع خرج', SC.exp, 100);
+  x.fillText(s.rest < 0 ? 'کسر' : 'موجودی', SC.rest, 100);
+  x.font = `bold 17px ${font}`;
+  x.fillStyle = '#1e7a4c'; x.fillText(money(s.inc), SC.inc, 130);
+  x.fillStyle = '#c0392b'; x.fillText(money(s.exp), SC.exp, 130);
+  x.fillStyle = s.rest < 0 ? '#c0392b' : '#1e7a4c'; x.fillText(money(Math.abs(s.rest)), SC.rest, 130);
+
+  const widths = [260, 170, 70, 160, 60];
+  const heads = ['توضیح', 'تاریخ', 'نوع', 'مبلغ', 'شماره'];
+  const fit = (text, maxW, size) => {
+    x.font = `${size}px ${font}`;
+    let t = String(text);
+    while(t.length > 1 && x.measureText(t).width > maxW - 10) t = t.slice(0, -1);
+    return t.length < String(text).length ? t.slice(0, -1) + '…' : t;
+  };
+  x.fillStyle = '#2c5f8a'; x.fillRect(40, yH, W - 80, HH);
+  x.fillStyle = '#ffffff'; x.font = `bold 15px ${font}`; x.textAlign = 'center';
+  let cx = W - 40;
+  const cells = widths.map((w, i) => { const c = { cx: cx - w / 2, w }; cx -= w; return c; });
+  heads.forEach((h, i) => x.fillText(h, cells[i].cx, yH + HH / 2));
+
+  x.strokeStyle = '#e1e1e1'; x.lineWidth = 1;
+  if(!rows.length){
+    x.fillStyle = '#555'; x.font = `14px ${font}`; x.textAlign = 'center';
+    x.fillText('تراکنشی ثبت نشده', W / 2, yH + HH + RH / 2);
+  }
+  rows.forEach((r, i) => {
+    const y = yH + HH + i * RH;
+    x.fillStyle = '#1f2937';
+    x.strokeRect(40, y, W - 80, RH);
+    x.textAlign = 'center';
+    x.font = `14px ${font}`;
+    x.fillText(String(i + 1), cells[4].cx, y + RH / 2);
+    x.fillText(fit(`${Math.abs(r.a).toLocaleString('en-US')} ${curLabel()}`, cells[3].w, 14), cells[3].cx, y + RH / 2);
+    x.fillStyle = r.type === 'in' ? '#1e7a4c' : '#c0392b';
+    x.fillText(r.type === 'in' ? 'دخل' : 'خرج', cells[2].cx, y + RH / 2);
+    x.fillStyle = '#1f2937';
+    x.font = `13px ${font}`;
+    x.fillText(fit(lgWhen(r), cells[1].w, 13), cells[1].cx, y + RH / 2);
+    x.fillText(fit(r.d || 'بدون شرح', cells[0].w, 14), cells[0].cx, y + RH / 2);
+  });
+
+  const t = today();
+  const fy = yH + HH + Math.max(1, rows.length) * RH + 36;
+  x.textAlign = 'right'; x.fillStyle = '#555'; x.font = `12px ${font}`;
+  x.fillText(`تاریخ تولید گزارش: ${latinDate(t.y, t.m, t.d)}`, W - 40, fy);
+  x.fillText('ساخته شده با حساب دفتری', W - 40, fy + 20);
+
+  const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+  if(!blob) return;
+  const file = new File([blob], 'dakhl-kharj.png', { type: 'image/png' });
+  if(navigator.canShare && navigator.canShare({ files: [file] })){
+    try{ await navigator.share({ files: [file], title: 'صورت دخل و خرج' }); return; }catch(e){ return; }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'dakhl-kharj.png'; a.click();
+}
+
 let LG = { type:'in', amt:'', desc:'', date:'', hh:'', mm:'', err:'', editId:null, sel:null };
 function ledgerCapture(){
   const g = id => document.getElementById(id);
@@ -2587,6 +2785,25 @@ document.addEventListener('click', async e => {
     case 'ledgerMenu': goTo({view:'ledgerMenu'}); break;
     case 'lgFilter': LGF = el.dataset.v; render(); break;
     case 'ledgerDelAll': openSheet(SHEETS.confirmDel('ledgerAll', '', null, null, null)); break;
+    case 'lgFilterOpen': openSheet(lgFilterHTML()); break;
+    case 'lgDate': {
+      const o = el.dataset.v === 'from' ? LGFR : LGTO;
+      const dt = o || today();
+      if(!OV.includes('cal')) pushOv('cal');
+      CAL = { open:true, mode:'days', sel:{ y:dt.y, m:dt.m, d:dt.d }, vy:dt.y, vm:dt.m, tgt: el.dataset.v };
+      calRender(); break;
+    }
+    case 'lgFilterApply': closeSheet(); render(); break;
+    case 'lgFilterClear': LGFR = null; LGTO = null; closeSheet(); render(); break;
+    case 'ledgerShare': openSheet(lgShareHTML()); break;
+    case 'lgShareAs': {
+      const v = el.dataset.v, rows = lgRowsForShare();
+      closeSheet();
+      if(v === 'pdf') lgPdf(rows);
+      else if(v === 'img') await lgImg(rows);
+      else await lgText(rows);
+      break;
+    }
     case 'ledgerNew': LG = ledgerFresh(); openSheet(ledgerFormHTML()); break;
     case 'ledgerType':
       ledgerCapture(); LG.type = el.dataset.v; LG.err = '';
@@ -2972,8 +3189,15 @@ document.addEventListener('click', async e => {
       const okD = Math.min(CAL.sel.d, daysIn(CAL.vy, CAL.vm));
       CAL.sel = { y: CAL.vy, m: CAL.vm, d: okD };
       const s = jStr(CAL.sel.y, CAL.sel.m, CAL.sel.d);
-      const f = document.getElementById('f-date'); if(f) f.value = s;
-      const dt = document.getElementById('dtxt'); if(dt) dt.textContent = s;
+      if(CAL.tgt){
+        const o = { y: CAL.sel.y, m: CAL.sel.m, d: CAL.sel.d };
+        if(CAL.tgt === 'from') LGFR = o; else LGTO = o;
+        const lt = document.getElementById(CAL.tgt === 'from' ? 'lgf-from-t' : 'lgf-to-t'); if(lt) lt.textContent = s;
+        CAL.tgt = null;
+      } else {
+        const f = document.getElementById('f-date'); if(f) f.value = s;
+        const dt = document.getElementById('dtxt'); if(dt) dt.textContent = s;
+      }
       closeCal(); break;
     }
 
@@ -3018,6 +3242,12 @@ document.addEventListener('keydown', e => {
 
 document.addEventListener('input', e => {
   if(e.target.id === 'q'){ V.q = e.target.value; render(); return; }
+  if(e.target.id === 'lgq'){
+    LGQ = e.target.value; render();
+    const i = document.getElementById('lgq');
+    if(i){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+    return;
+  }
   if(e.target.id === 'cq'){
     V.q = e.target.value; render();
     const i = document.getElementById('cq');
