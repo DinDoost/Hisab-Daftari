@@ -1376,7 +1376,7 @@ async function shareImg3(c, onReady){
   const tBottom = tTop + hdrH + rowHs.reduce((a, b) => a + b, 0);
   const H = tBottom + 130;
   const cv = document.createElement('canvas');
-  const Q = 3; cv.width = W * Q; cv.height = H * Q;
+  const Q = 4; cv.width = W * Q; cv.height = H * Q;
   const x = cv.getContext('2d');
   x.scale(Q, Q); x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
   const unit = curLabel();
@@ -2361,7 +2361,7 @@ async function lgImg(rows, onReady){
   try{ await document.fonts.load('bold 22px Vazirmatn'); await document.fonts.load('14px Vazirmatn'); }catch(e){}
   const W = 800, RH = 42, HH = 40, yH = 160;
   const H = yH + HH + Math.max(1, rows.length) * RH + 80;
-  const Q = 2;
+  const Q = 4;
   const cv = document.createElement('canvas');
   cv.width = W * Q; cv.height = H * Q;
   const x = cv.getContext('2d');
