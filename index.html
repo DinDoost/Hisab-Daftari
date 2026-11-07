@@ -137,6 +137,10 @@ input:focus,select:focus{outline:2px solid #a9cde8;border-color:transparent}
 .lg-bar input{flex:1;min-width:0;padding:11px 14px}
 .lg-fbtn{border:0;border-radius:14px;background:var(--soft);color:var(--deep);font:inherit;font-weight:700;font-size:14px;padding:11px 16px;cursor:pointer;flex:none}
 .lg-fbtn.on{background:var(--pri);color:#fff}
+.opt{position:relative}
+.opt.busy{color:transparent!important;pointer-events:none}
+.opt.busy>*{visibility:hidden}
+.opt.busy::after{content:"";position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border:3px solid rgba(31,41,55,.25);border-top-color:#1f2937;border-radius:50%;animation:btnspin .7s linear infinite}
 .top .dots{font-size:24px;font-weight:700;line-height:1}
 .live-btn{border:0;border-radius:999px;background:var(--pri);color:#fff;font:inherit;font-size:14px;font-weight:700;padding:9px 18px;cursor:pointer;box-shadow:0 6px 16px rgba(58,139,194,.3)}
 .dt-row{display:flex;gap:14px;align-items:stretch}
@@ -2286,8 +2290,9 @@ function lgSummaryText(rows){
   const t = today();
   return `دخل: ${money(s.inc)}\nخرج: ${money(s.exp)}\n${s.rest < 0 ? 'کسر' : 'موجودی'}: ${money(Math.abs(s.rest))}\nتاریخ: ${latinDate(t.y, t.m, t.d)}`;
 }
-async function lgText(rows){
+async function lgText(rows, onReady){
   const text = lgSummaryText(rows);
+  if(onReady) onReady();
   if(navigator.share){ try{ await navigator.share({ text }); return; }catch(e){ return; } }
   try{ await navigator.clipboard.writeText(text); alert('متن خلاصه کپی شد.'); }
   catch(e){ alert(text); }
@@ -2337,21 +2342,23 @@ function lgInvHTML(rows){
   <div class="foot">تاریخ تولید گزارش<br><b>${latinDate(t.y, t.m, t.d)}</b><br>ساخته شده با حساب دفتری</div>
   </body></html>`;
 }
-function lgPdf(rows){
+function lgPdf(rows, onReady){
   const f = document.createElement('iframe');
   f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
   document.body.appendChild(f);
   const d = f.contentWindow.document;
   d.open(); d.write(lgInvHTML(rows)); d.close();
   setTimeout(() => {
+    if(onReady) onReady();
     try{ f.contentWindow.focus(); f.contentWindow.print(); }
     catch(e){ alert('ذخیره PDF در این مرورگر پشتیبانی نمی‌شود.'); }
     setTimeout(() => f.remove(), 1500);
   }, 300);
 }
-async function lgImg(rows){
+async function lgImg(rows, onReady){
   const s = lgSums(rows);
   const font = 'Vazirmatn, Tahoma, sans-serif';
+  try{ await document.fonts.load('bold 22px Vazirmatn'); await document.fonts.load('14px Vazirmatn'); }catch(e){}
   const W = 800, RH = 42, HH = 40, yH = 160;
   const H = yH + HH + Math.max(1, rows.length) * RH + 80;
   const Q = 2;
@@ -2421,6 +2428,7 @@ async function lgImg(rows){
   const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
   if(!blob) return;
   const file = new File([blob], 'dakhl-kharj.png', { type: 'image/png' });
+  if(onReady) onReady();
   if(navigator.canShare && navigator.canShare({ files: [file] })){
     try{ await navigator.share({ files: [file], title: 'صورت دخل و خرج' }); return; }catch(e){ return; }
   }
@@ -2798,10 +2806,14 @@ document.addEventListener('click', async e => {
     case 'ledgerShare': openSheet(lgShareHTML()); break;
     case 'lgShareAs': {
       const v = el.dataset.v, rows = lgRowsForShare();
-      closeSheet();
-      if(v === 'pdf') lgPdf(rows);
-      else if(v === 'img') await lgImg(rows);
-      else await lgText(rows);
+      el.classList.add('busy');
+      const ready = () => closeSheet();
+      try{
+        if(v === 'pdf') lgPdf(rows, ready);
+        else if(v === 'img') await lgImg(rows, ready);
+        else await lgText(rows, ready);
+      }catch(e){ alert('ساخت فایل ناموفق بود.'); }
+      finally{ if(v !== 'pdf' && el.isConnected) el.classList.remove('busy'); }
       break;
     }
     case 'ledgerNew': LG = ledgerFresh(); openSheet(ledgerFormHTML()); break;
