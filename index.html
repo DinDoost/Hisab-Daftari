@@ -134,6 +134,11 @@ input:focus,select:focus{outline:2px solid #a9cde8;border-color:transparent}
 .lg-filt button.on.r{background:#c0392b}
 .lg-filt button.on.g{background:#1e7a4c}
 .pt-sky{display:block;width:100%;margin:12px 0;padding:18px 16px;border:0;border-radius:16px;background:#bae6fd;color:#075985;font:inherit;font-weight:700;font-size:16px;text-align:right;cursor:pointer}
+.pt-h-s{font-size:16px;font-weight:800;margin:0;color:#1f2937}
+.pt-q{font-size:15px;font-weight:800;text-align:center;color:#1f2937;margin:28px 0 14px}
+.pt-q-s{font-size:14px;font-weight:600;text-align:center;color:#374151;margin:24px 0 0}
+.pt-sky-s{font-size:14px;font-weight:800;padding:14px 16px}
+.pt-bottom{margin-top:auto}
 .pt-link{background:none;border:0;color:#c62828;font:inherit;font-weight:700;font-size:16px;padding:12px;cursor:pointer}
 .info-h{font-size:20px;font-weight:800;color:#1f2937;margin:20px 0 8px}
 .info-h4{font-size:18px;font-weight:800;color:#1f2937;margin:16px 0 6px}
@@ -740,7 +745,7 @@ window.addEventListener('popstate', e => {
     const top = OV.pop();
     if(top === 'portal'){ closePortal(); return; }
     if(top === 'info'){ infoHide(); return; }
-    if(top === 'ptmenu'){ PORTAL.menu = false; PORTAL.setPin = false; PORTAL.askOut = false; renderPortal(); return; }
+    if(top === 'ptmenu'){ PORTAL.menu = false; PORTAL.setPin = false; PORTAL.askOut = false; PORTAL.verifyOff = false; renderPortal(); return; }
     if(top === 'tclk'){ hideTclk(); return; }
     if(top === 'txmode'){ LPSEL = null; render(); return; }
     if(top === 'lgsel'){ if(V.view === 'ledger') ledgerCapture(); LG.sel = null; render(); return; }
@@ -981,7 +986,7 @@ function render(){
       <section class="hero">
         <div class="lbl">صورت حساب: ${esc(c.n)}</div>
         <div class="net"><span>${num(bal)}</span><span>${curLabel()}</span></div>
-        <div style="margin-top:10px;font-size:26px;font-weight:900;line-height:1.5;color:${bal > 0 ? '#fca5a5' : bal < 0 ? '#86efac' : '#fff'}">${bal > 0 ? 'بدهکار است' : bal < 0 ? 'طلب دارد' : 'تسویه'}</div>
+        <div style="margin-top:-13px;margin-right:12%;font-size:15px;font-weight:600;line-height:1.5;text-align:right;color:${bal > 0 ? '#fca5a5' : bal < 0 ? '#86efac' : '#fff'}">« ${bal > 0 ? 'بدهکار است' : bal < 0 ? 'طلب دارد' : 'تسویه'} »</div>
         <div class="mini-row">
           <div class="mini"><span class="mini-name" style="display:block;white-space:nowrap;overflow:hidden">گرفت: ${esc(c.n)}</span><b>${money(debts)}</b></div>
           <div class="mini"><span class="mini-name" style="display:block;white-space:nowrap;overflow:hidden">پرداخت: ${esc(c.n)}</span><b>${money(pays)}</b></div>
@@ -2622,6 +2627,17 @@ function pinHash(salt, code){
   for(let i = 0; i < str.length; i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
   return h.toString(16);
 }
+function pinStream(salt, pin, n){ const k = pinHash(salt, pin); let o = ''; while(o.length < n) o += k; return o.slice(0, n); }
+function pinEncode(code, salt, pin){
+  const k = pinStream(salt, pin, code.length); let o = '';
+  for(let i = 0; i < code.length; i++) o += (code.charCodeAt(i) ^ k.charCodeAt(i)).toString(16).padStart(4, '0');
+  return o;
+}
+function pinDecode(enc, salt, pin){
+  const n = Math.floor((enc || '').length / 4); const k = pinStream(salt, pin, n); let o = '';
+  for(let i = 0; i < n; i++) o += String.fromCharCode(parseInt(enc.substr(i * 4, 4), 16) ^ k.charCodeAt(i));
+  return o;
+}
 function portalPinOn(){ const r = loadRem(); return !!(r && r.mode === 'pin'); }
 function rememberPortal(phone, code, data){
   PORTAL_SESS = { phone, code };
@@ -2680,12 +2696,26 @@ function ptExit(){
   if(OV.includes('ptmenu')) popOv('ptmenu');
   portalLogoutNow();
 }
+function ptOffOk(){
+  const r = loadRem(); if(!r || r.mode !== 'pin') return;
+  const pin = latin(val('pt-offpin')).replace(/\D/g, '');
+  if(!/^[0-9]{4}$/.test(pin)){ PORTAL.err = 'پین کد باید چهار رقمی باشد.'; return renderPortal(); }
+  if(pinHash(r.salt, pin) !== r.ph){ PORTAL.err = 'پین کد وارد شده درست نیست.'; return renderPortal(); }
+  const code = pinDecode(r.enc, r.salt, pin);
+  PORTAL.verifyOff = false; PORTAL.menu = false; PORTAL.err = '';
+  if(OV.includes('ptmenu')) popOv('ptmenu');
+  if(!/^[0-9]{4}$/.test(code)){ portalForgetPin(); return; }
+  saveRem({ phone: r.phone, mode:'auto', code, data: r.data || null });
+  PORTAL.note = 'پین کد غیرفعال شد';
+  renderPortal();
+  refreshRemembered({ phone: r.phone, code });
+}
 function ptPinSave(){
   const r = loadRem(); if(!r) return;
   const code = latin(val('pt-newpin')).replace(/\D/g, '');
   if(!/^[0-9]{4}$/.test(code)){ PORTAL.err = 'پین کود باید چهار رقمی باشد.'; return renderPortal(); }
   const salt = Math.random().toString(36).slice(2, 10);
-  saveRem({ phone: r.phone, mode:'pin', salt, ph: pinHash(salt, code), data: r.data || null });
+  saveRem({ phone: r.phone, mode:'pin', salt, ph: pinHash(salt, code), enc: r.code ? pinEncode(r.code, salt, code) : '', data: r.data || null });
   PORTAL.setPin = false; PORTAL.menu = false; PORTAL.err = ''; PORTAL.note = 'پین کود فعال شد';
   if(OV.includes('ptmenu')) popOv('ptmenu');
   renderPortal();
@@ -2747,21 +2777,33 @@ function renderPortal(){
   if(PORTAL.setPin){
     el.innerHTML = `
       <div class="pt-wrap">
-        <div class="pt-top"><span class="sp"></span><h1>پین کود جدید</h1><button class="ic" data-a="ptSetBack" aria-label="برگشت">${ICON.back}</button></div>
-        <div class="fld"><span class="fi">${LOCKSVG}</span><div class="fw"><label for="pt-newpin">پین کود چهار رقمی</label><input id="pt-newpin" type="tel" dir="ltr" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="4" oninput="this.value=latin(this.value).replace(/[^0-9]/g,'').slice(0,4)"></div></div>
+        <div class="pt-top"><span class="sp"></span><h1>پین کد جدید</h1><button class="ic" data-a="ptSetBack" aria-label="برگشت">${ICON.back}</button></div>
+        <div class="fld"><span class="fi">${LOCKSVG}</span><div class="fw"><label for="pt-newpin">پین کد چهار رقمی</label><input id="pt-newpin" type="tel" dir="ltr" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="4" oninput="this.value=latin(this.value).replace(/[^0-9]/g,'').slice(0,4)"></div></div>
         <div class="hint" style="min-height:22px;color:var(--neg)">${esc(PORTAL.err)}</div>
         <button class="bottom-btn" data-a="ptPinSave">${ICON.check}<span>ذخیره</span></button>
       </div>`;
     el.classList.remove('hidden');
     return;
   }
-  if(PORTAL.askOut){
+  if(PORTAL.verifyOff){
     el.innerHTML = `
       <div class="pt-wrap">
-        <div class="pt-top"><span class="sp"></span><h1>خروج از حساب</h1><span class="sp"></span></div>
-        <p class="info-p" style="text-align:center;margin:28px 0 12px">آیا می‌خواهید از حساب خارج شوید؟</p>
-        <button class="pt-sky" data-a="ptExit">خارج شوم</button>
-        <button class="pt-sky" data-a="ptCancelOut">انصراف</button>
+        <div class="pt-top"><span class="sp"></span><h2 class="pt-h-s">غیرفعال کردن پین کد</h2><button class="ic" data-a="ptVerBack" aria-label="برگشت">${ICON.back}</button></div>
+        <div class="fld"><span class="fi">${LOCKSVG}</span><div class="fw"><label for="pt-offpin">پین کد فعلی</label><input id="pt-offpin" type="tel" dir="ltr" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="4" oninput="this.value=latin(this.value).replace(/[^0-9]/g,'').slice(0,4)"></div></div>
+        <div class="hint" style="min-height:22px;color:var(--neg)">${esc(PORTAL.err)}</div>
+        <button class="bottom-btn" data-a="ptOffOk">${ICON.check}<span>تایید</span></button>
+      </div>`;
+    el.classList.remove('hidden');
+    return;
+  }
+  if(PORTAL.askOut){
+    el.innerHTML = `
+      <div class="pt-wrap" style="min-height:calc(100vh - 150px);display:flex;flex-direction:column">
+        <div class="pt-top"><span class="sp"></span><h2 class="pt-h-s">خروج از حساب</h2><span class="sp"></span></div>
+        <p class="pt-q-s">آیا می‌خواهید از حساب خارج شوید؟</p>
+        <div style="flex:1;display:flex;align-items:center;justify-content:center">
+          <button class="pt-sky pt-sky-s" style="width:70%;text-align:center" data-a="ptExit">تایید</button>
+        </div>
       </div>`;
     el.classList.remove('hidden');
     return;
@@ -2772,9 +2814,9 @@ function renderPortal(){
       <div class="pt-wrap">
         <div class="pt-top"><span class="sp"></span><h1>گزینه‌ها</h1><button class="ic" data-a="ptMenuBack" aria-label="برگشت">${ICON.back}</button></div>
         ${on
-          ? '<button class="pt-sky" data-a="ptAskOut">غیرفعال کردن پین کود</button><button class="pt-sky" data-a="ptForget">پین را فراموش کردم</button>'
-          : '<button class="pt-sky" data-a="ptPinOn">فعال کردن پین کود</button>'}
-        <button class="pt-sky" data-a="ptAskOut">از حساب خود خارج شوید</button>
+          ? '<button class="pt-sky" data-a="ptVerifyOff">غیرفعال کردن پین کد</button><button class="pt-sky" data-a="ptForget">پین را فراموش کردم</button>'
+          : '<button class="pt-sky" data-a="ptPinOn">فعال کردن پین کد</button>'}
+        <button class="pt-sky" data-a="ptAskOut">خروج از حساب</button>
       </div>`;
     el.classList.remove('hidden');
     return;
@@ -2825,7 +2867,7 @@ function renderPortal(){
         ${PORTAL.note ? `<div class="hint" style="color:#0b4d2b;font-weight:700">${esc(PORTAL.note)}</div>` : ''}
         <section class="hero">
           <div class="lbl">صورت حساب: ${nm}</div>
-          <div class="net"><span>${num(bal)}</span><span>${curLabel()}</span><small style="color:${bal > 0 ? '#c62828' : bal < 0 ? '#0b4d2b' : '#fff'};background:${bal !== 0 ? '#fff' : 'transparent'};font-weight:700;font-size:20px;line-height:1.4;margin-top:6px;display:inline-block;padding:${bal !== 0 ? '2px 14px' : '0'};border-radius:999px">${status}</small></div>
+          <div class="net" style="flex-wrap:wrap"><span>${num(bal)}</span><span>${curLabel()}</span><small style="display:block;flex-basis:100%;width:100%;text-align:right;background:none;border:0;padding:0;box-shadow:none;border-radius:0;color:${bal > 0 ? '#fca5a5' : bal < 0 ? '#86efac' : '#fff'};font-weight:700;font-size:16px;margin-top:6px">«${status}»</small></div>
           <div class="mini-row">
             <div class="mini"><span class="mini-name" style="display:block;white-space:nowrap;overflow:hidden">گرفت: ${nm}</span><b>${money(got)}</b></div>
             <div class="mini"><span class="mini-name" style="display:block;white-space:nowrap;overflow:hidden">پرداخت: ${nm}</span><b>${money(paid)}</b></div>
@@ -3301,6 +3343,9 @@ document.addEventListener('click', async e => {
     case 'ptPinSave': ptPinSave(); break;
     case 'ptExit': PORTAL.askOut = false; ptExit(); break;
     case 'ptAskOut': PORTAL.askOut = true; renderPortal(); break;
+    case 'ptVerifyOff': PORTAL.menu = false; PORTAL.verifyOff = true; PORTAL.err = ''; renderPortal(); break;
+    case 'ptOffOk': ptOffOk(); break;
+    case 'ptVerBack': PORTAL.verifyOff = false; PORTAL.menu = true; PORTAL.err = ''; renderPortal(); break;
     case 'ptCancelOut': PORTAL.askOut = false; renderPortal(); break;
     case 'ptForget': ptForget(); break;
     case 'infoMenu': infoMenu(); break;
