@@ -2798,11 +2798,11 @@ function renderPortal(){
   }
   if(PORTAL.askOut){
     el.innerHTML = `
-      <div class="pt-wrap" style="min-height:calc(100vh - 150px);display:flex;flex-direction:column">
+      <div class="pt-wrap">
         <div class="pt-top"><span class="sp"></span><h2 class="pt-h-s">خروج از حساب</h2><span class="sp"></span></div>
         <p class="pt-q-s">آیا می‌خواهید از حساب خارج شوید؟</p>
-        <div style="flex:1;display:flex;align-items:center;justify-content:center">
-          <button class="pt-sky pt-sky-s" style="width:70%;text-align:center" data-a="ptExit">تایید</button>
+        <div style="display:flex;justify-content:center;margin-top:12px">
+          <button class="pt-sky pt-sky-s" style="width:auto;min-width:0;margin:0;padding:8px 22px;border-radius:12px;text-align:center" data-a="ptExit">تایید</button>
         </div>
       </div>`;
     el.classList.remove('hidden');
