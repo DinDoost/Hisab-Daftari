@@ -308,6 +308,19 @@ html,body{touch-action:pan-x pan-y;-ms-touch-action:pan-x pan-y}
 .srow{display:flex;flex-direction:column;gap:6px;margin-top:12px}
 .srow-b{width:100%;border:1px solid var(--line);background:#fff;color:var(--text);border-radius:12px;padding:8px 14px;font-size:14px;font-weight:600;cursor:pointer;text-align:right}
 .srow-out{margin-top:18px}
+.st-page .sec-title{font-size:13px;color:var(--muted);margin-bottom:0}
+.st-page .opt{padding:10px 14px}
+.st-page .opt span{font-size:13px}
+.st-page .opt .sub{font-size:12px}
+.st-page .srow{gap:6px;margin-top:8px}
+.st-page .srow-b{font-size:13px;padding:9px 12px}
+.st-page .srow-out{margin-top:14px}
+.st-page .ka-row{font-size:12px;margin-top:10px}
+.st-page .ka-row b{font-size:12px}
+.st-page .mail-row{padding:10px 12px}
+.st-page .mail-txt b{font-size:13px}
+.st-page .mail-txt small{font-size:12px}
+.st-page .mail-ok{font-size:11px}
 .ka-row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px;padding:6px 6px 0;font-size:13px;color:var(--muted)}
 .ka-row b{font-weight:600;color:var(--text)}
 .ka-row .ka-v{direction:rtl;text-align:left}
@@ -727,7 +740,7 @@ window.addEventListener('popstate', e => {
     const top = OV.pop();
     if(top === 'portal'){ closePortal(); return; }
     if(top === 'info'){ infoHide(); return; }
-    if(top === 'ptmenu'){ PORTAL.menu = false; PORTAL.setPin = false; renderPortal(); return; }
+    if(top === 'ptmenu'){ PORTAL.menu = false; PORTAL.setPin = false; PORTAL.askOut = false; renderPortal(); return; }
     if(top === 'tclk'){ hideTclk(); return; }
     if(top === 'txmode'){ LPSEL = null; render(); return; }
     if(top === 'lgsel'){ if(V.view === 'ledger') ledgerCapture(); LG.sel = null; render(); return; }
@@ -867,12 +880,14 @@ function render(){
 
   if(V.view === 'settings'){
     m.innerHTML = pageHead('تنظیمات', 'menu') + `
+      <div class="st-page">
       ${emailSection(4)}
       <div class="srow">
         <button class="srow-b" data-a="pinToggle">پین کد امنیتی: ${S.pin ? 'فعال' : 'غیرفعال'}</button>
         ${S.pin ? '<button class="srow-b" data-a="pinChange">تغییر پین</button>' : ''}
         <button class="srow-b srow-out" data-a="authLogout">خروج از حساب</button>
         <div class="ka-row"><b>آخرین بروزرسانی سرور</b><span class="ka-v" id="ka-v">${kaText()}</span></div>
+      </div>
       </div>
 
 `;
@@ -2634,9 +2649,8 @@ async function refreshRemembered(r){
 }
 function portalLogoutNow(){
   const r = loadRem();
-  const ph = (r && r.phone) || PORTAL.phone || savedPortalPhone() || '';
-  clearRem(); PORTAL_SESS = null;
-  PORTAL = { code:'', phone: ph, err:'', busy:false, data:null, lock:null };
+  clearRem(); clearPortalPhone(); PORTAL_SESS = null;
+  PORTAL = { code:'', phone:'', err:'', busy:false, data:null, lock:null };
   renderPortal();
 }
 function portalPinToggle(){
@@ -2653,7 +2667,7 @@ function portalPinToggle(){
 function portalForgetPin(){
   const r = loadRem();
   PORTAL.lock = null; PORTAL.menu = false; PORTAL.setPin = false; PORTAL.data = null; PORTAL.err = '';
-  PORTAL.phone = (r && r.phone) || savedPortalPhone() || ''; PORTAL.code = '';
+  clearPortalPhone(); PORTAL.phone = ''; PORTAL.code = '';
   renderPortal();
 }
 function ptForget(){
@@ -2741,15 +2755,26 @@ function renderPortal(){
     el.classList.remove('hidden');
     return;
   }
+  if(PORTAL.askOut){
+    el.innerHTML = `
+      <div class="pt-wrap">
+        <div class="pt-top"><span class="sp"></span><h1>خروج از حساب</h1><span class="sp"></span></div>
+        <p class="info-p" style="text-align:center;margin:28px 0 12px">آیا می‌خواهید از حساب خارج شوید؟</p>
+        <button class="pt-sky" data-a="ptExit">خارج شوم</button>
+        <button class="pt-sky" data-a="ptCancelOut">انصراف</button>
+      </div>`;
+    el.classList.remove('hidden');
+    return;
+  }
   if(PORTAL.menu){
     const on = portalPinOn();
     el.innerHTML = `
       <div class="pt-wrap">
         <div class="pt-top"><span class="sp"></span><h1>گزینه‌ها</h1><button class="ic" data-a="ptMenuBack" aria-label="برگشت">${ICON.back}</button></div>
         ${on
-          ? '<button class="pt-sky" data-a="ptExit">غیرفعال کردن پین کود</button><button class="pt-sky" data-a="ptForget">پین را فراموش کردم</button>'
+          ? '<button class="pt-sky" data-a="ptAskOut">غیرفعال کردن پین کود</button><button class="pt-sky" data-a="ptForget">پین را فراموش کردم</button>'
           : '<button class="pt-sky" data-a="ptPinOn">فعال کردن پین کود</button>'}
-        <button class="pt-sky" data-a="ptExit">از حساب خود خارج شوید</button>
+        <button class="pt-sky" data-a="ptAskOut">از حساب خود خارج شوید</button>
       </div>`;
     el.classList.remove('hidden');
     return;
@@ -3274,7 +3299,9 @@ document.addEventListener('click', async e => {
     case 'ptSetBack': PORTAL.setPin = false; PORTAL.menu = true; PORTAL.err = ''; renderPortal(); break;
     case 'ptPinOn': PORTAL.menu = false; PORTAL.setPin = true; PORTAL.err = ''; renderPortal(); break;
     case 'ptPinSave': ptPinSave(); break;
-    case 'ptExit': ptExit(); break;
+    case 'ptExit': PORTAL.askOut = false; ptExit(); break;
+    case 'ptAskOut': PORTAL.askOut = true; renderPortal(); break;
+    case 'ptCancelOut': PORTAL.askOut = false; renderPortal(); break;
     case 'ptForget': ptForget(); break;
     case 'infoMenu': infoMenu(); break;
     case 'infoAbout': infoAbout(); break;
