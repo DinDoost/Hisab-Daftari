@@ -454,6 +454,13 @@ body:has(#main > .list), body:has(#main > .lg-scroll), body:has(#main > #nbRows)
 #main:has(> .list) .cq-lbl{width:104px;min-height:54px;height:54px;border-radius:16px !important;font-size:15px !important;padding:0 10px !important;justify-content:center;box-sizing:border-box}
 #main:has(> .list) .cq-wrap input{flex:1 1 auto;width:auto !important;min-width:0;height:54px;min-height:54px !important;padding:0 14px !important;font-size:14px !important;box-sizing:border-box;border-radius:16px !important}
 #main:has(> .list) .cq-wrap input::placeholder{font-size:14px}
+
+/* ردیف مشتریان: نام و مبلغ کوچک‌تر تا نام کامل‌تر دیده شود */
+#main:has(> .list) .cust-wrap .card .nm b{font-size:13px !important;max-width:100%}
+#main:has(> .list) .cust-wrap .card .nm small{font-size:11px !important}
+#main:has(> .list) .cust-wrap .card .bal{font-size:12px !important}
+#main:has(> .list) .cust-wrap .card .bal-note{font-size:10px !important}
+#main:has(> .list) .cust-wrap .card{gap:8px}
 </style>
 </head>
 <body>
@@ -519,6 +526,16 @@ async function cloudLoad(){
         hh: r.hh == null ? null : Number(r.hh), mm: r.mm == null ? null : Number(r.mm) }));
     }
   }
+  /* ترتیب قبلی طرف حساب‌ها و مشتری‌ها را نگه می‌داریم؛ دیتابیس ترتیب ثابتی برنمی‌گرداند و بدون این، مشتری‌ها جابه‌جا می‌شدند */
+  const _pOld = new Map((S.parties || []).map((p, i) => [p.id, i]));
+  const _pRank = id => _pOld.has(id) ? _pOld.get(id) : 1e9;
+  parties.sort((a, b) => _pRank(a.id) - _pRank(b.id));
+  parties.forEach(p => {
+    const oldP = (S.parties || []).find(x => x.id === p.id);
+    const _cOld = new Map(((oldP && oldP.c) || []).map((c, i) => [c.id, i]));
+    const _cRank = id => _cOld.has(id) ? _cOld.get(id) : 1e9;
+    p.c.sort((a, b) => _cRank(a.id) - _cRank(b.id));
+  });
   S = { ...S, cur:S.cur || 'toman', parties, ledger, email:cloudUser.email || S.email || '', loggedIn:true };
   try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){}
 }
