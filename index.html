@@ -391,6 +391,39 @@ body:has(#main > .list), body:has(#main > .lg-scroll), body:has(#main > #nbRows)
 #main:has(> .list) .live-btn{padding:5px 12px !important;font-size:12px !important}
 #main:has(> .list) > .cq-wrap{margin:2px 0 6px !important}
 #main:has(> .list) .cq-wrap input{padding:7px 12px !important;font-size:13px !important;border-radius:12px !important}
+
+/* اصلاحات: فاصله تراکنش‌ها از کارت شماره تلفن، و فشرده‌سازی قالب بالای صفحه مشتری (مثل طرف حساب‌ها) */
+#main:has(> .list) > .list{margin-top:18px !important}
+#main:has(> .list) .sec-title{margin-bottom:2px !important}
+#main:has(> .list) .mini-row{gap:8px !important}
+#main:has(> .list) .mini{padding:7px 10px !important;border-radius:12px !important}
+#main:has(> .list) .mini span{font-size:11px !important}
+#main:has(> .list) .mini b{font-size:13px !important;margin-top:3px !important}
+#main:has(> .list) .hero .net{margin:2px 0 6px !important}
+#main:has(> .list) .tx-card{padding-right:18px !important}
+
+/* صورت حساب زنده: بالای صفحه ثابت و فشرده؛ فقط فهرست تراکنش‌ها حرکت می‌کند */
+.portal:has(.pt-stmt){overflow:hidden;padding-bottom:0;display:flex;flex-direction:column}
+.pt-stmt{flex:1 1 auto;min-height:0;height:100%;display:flex;flex-direction:column;padding:10px 14px 0;box-sizing:border-box;width:100%}
+.pt-stmt > *:not(.pt-list){flex:0 0 auto}
+.pt-stmt .pt-top{margin-bottom:2px}
+.pt-stmt .pt-top h1{font-size:17px}
+.pt-stmt .pt-top .ic{width:36px;height:36px}
+.pt-stmt .pt-head{margin:2px 0 4px;gap:4px}
+.pt-stmt .pt-head b{font-size:14px}
+.pt-stmt .pt-photo{width:44px;height:44px;font-size:20px}
+.pt-stmt .hint{margin:2px 0}
+.pt-stmt .hero{padding:10px 12px !important;border-radius:16px !important;margin:0 !important}
+.pt-stmt .hero .lbl{font-size:11px !important}
+.pt-stmt .hero .net{font-size:22px !important;margin:2px 0 6px !important}
+.pt-stmt .mini-row{gap:8px}
+.pt-stmt .mini{padding:7px 10px;border-radius:12px}
+.pt-stmt .mini span{font-size:11px}
+.pt-stmt .mini b{font-size:13px;margin-top:3px}
+.pt-stmt .sec-title{margin:18px 4px 4px;font-size:14px;font-weight:700}
+.pt-list{flex:1 1 0;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-bottom:calc(40px + env(safe-area-inset-bottom,0px));margin-top:0 !important}
+/* فاصله تراکنش‌ها از کارت شماره تلفن در صفحه مشتری داخل برنامه */
+#main:has(> .list) .sec-title{margin-top:24px !important}
 </style>
 </head>
 <body>
@@ -595,8 +628,8 @@ function custStatus(b){
   return 'تسویه‌اید';
 }
 function groupStatus(n){
-  if(n > 0) return 'مجموع طلب شما از مشتریان';
-  if(n < 0) return 'مجموع طلب مشتریان از شما';
+  if(n > 0) return 'بدهی مشتریان از شما';
+  if(n < 0) return 'طلب مشتریان از شما';
   return 'تسویه‌اید';
 }
 
@@ -1227,8 +1260,7 @@ function render(){
       </header>
       <section class="hero">
         <div class="lbl">صورت حساب: ${esc(c.n)}</div>
-        <div class="net"><span>${num(bal)}</span><span>${curLabel()}</span></div>
-        <div style="margin-top:-13px;margin-right:12%;font-size:15px;font-weight:600;line-height:1.5;text-align:right;color:${bal > 0 ? '#fca5a5' : bal < 0 ? '#86efac' : '#fff'}">« ${bal > 0 ? 'بدهکار است' : bal < 0 ? 'طلب دارد' : 'تسویه'} »</div>
+        <div class="net"><span>${num(bal)}</span><span>${curLabel()}</span><span style="font-size:15px;font-weight:700;color:${bal > 0 ? '#fca5a5' : bal < 0 ? '#86efac' : '#fff'}">« ${bal > 0 ? 'بدهکار است' : bal < 0 ? 'طلب دارد' : 'تسویه'} »</span></div>
         <div class="mini-row">
           <div class="mini"><span class="mini-name" style="display:block;white-space:nowrap;overflow:hidden">گرفت: ${esc(c.n)}</span><b>${money(debts)}</b></div>
           <div class="mini"><span class="mini-name" style="display:block;white-space:nowrap;overflow:hidden">پرداخت: ${esc(c.n)}</span><b>${money(pays)}</b></div>
@@ -3100,7 +3132,7 @@ function renderPortal(){
         <div class="card tx-card" style="cursor:default"><span class="nm tx-nm"><b>${esc(t.d || 'بدون شرح')}</b><small>${jStr(t.y, t.m, t.dd)}${t.hh != null ? ' · ' + clockText(Number(t.hh), Number(t.mm) || 0) : ''}</small></span><span class="bal ${balCls(Number(t.a) || 0)}">${money(Number(t.a) || 0)}</span></div>`).join('')
       : `<div class="empty">هنوز تراکنشی ثبت نشده.</div>`;
     el.innerHTML = `
-      <div class="pt-wrap">
+      <div class="pt-wrap pt-stmt">
         <div class="pt-top"><button class="ic" data-a="portalMenu" aria-label="گزینه‌ها"><span class="pt-dots">⋮</span></button><h1>${nm}</h1><button class="ic" data-a="portalClose" aria-label="برگشت">${ICON.back}</button></div>
         
         <div class="pt-head">
@@ -3109,15 +3141,15 @@ function renderPortal(){
         ${PORTAL.note ? `<div class="hint" style="color:#0b4d2b;font-weight:700">${esc(PORTAL.note)}</div>` : ''}
         <section class="hero">
           <div class="lbl">صورت حساب: ${nm}</div>
-          <div class="net" style="flex-wrap:wrap"><span>${num(bal)}</span><span>${curLabel()}</span><small style="display:block;flex-basis:100%;width:100%;text-align:right;background:none;border:0;padding:0;box-shadow:none;border-radius:0;color:${bal > 0 ? '#fca5a5' : bal < 0 ? '#86efac' : '#fff'};font-weight:700;font-size:16px;margin-top:6px">«${status}»</small></div>
+          <div class="net" style="flex-wrap:wrap"><span>${num(bal)}</span><span>${curLabel()}</span><small style="font-size:15px;font-weight:700;color:${bal > 0 ? '#fca5a5' : bal < 0 ? '#86efac' : '#fff'}">«${status}»</small></div>
           <div class="mini-row">
             <div class="mini"><span class="mini-name" style="display:block;white-space:nowrap;overflow:hidden">گرفت: ${nm}</span><b>${money(got)}</b></div>
             <div class="mini"><span class="mini-name" style="display:block;white-space:nowrap;overflow:hidden">پرداخت: ${nm}</span><b>${money(paid)}</b></div>
           </div>
         </section>
         <div class="sec-title">تراکنش‌ها</div>
-        <div class="list">${rows}</div>
-        <p class="hint" style="margin-top:14px">این صفحه فقط برای مشاهده است.</p>
+        <div class="list pt-list">${rows}
+        <p class="hint" style="margin-top:6px">این صفحه فقط برای مشاهده است.</p></div>
       </div>`;
   }
   el.classList.remove('hidden');
