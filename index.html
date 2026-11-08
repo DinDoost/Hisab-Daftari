@@ -345,6 +345,74 @@ html,body{touch-action:pan-x pan-y;-ms-touch-action:pan-x pan-y}
 #sheet textarea{height:130px !important;min-height:130px !important}
 html,body{overscroll-behavior:none;overscroll-behavior-y:none}
 .sheet,#sheet,#app{overscroll-behavior:contain}
+
+/* فقط بخش لیست بالا و پایین برود؛ هدر و بالای صفحه ثابت بماند */
+body:has(#main > .list), body:has(#main > #nbRows){overflow:hidden}
+#main:has(> .list), #main:has(> #nbRows){height:100dvh;height:100vh;display:flex;flex-direction:column;overflow:hidden;padding-bottom:0}
+#main > .list, #main > #nbRows{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:120px}
+#main > .top, #main > .hero, #main > .info, #main > .lg-bar, #main > .pick-row, #main > .search{flex:0 0 auto}
+
+/* بخش‌های ثابت بالا کوچک‌تر شوند تا فضای بیشتری برای لیست بماند */
+#main:has(> .list) > .top{padding:6px 4px 4px !important}
+#main:has(> .list) > .top h1{font-size:17px}
+#main:has(> .list) > .hero{padding:12px 14px !important;border-radius:20px !important}
+#main:has(> .list) > .hero .lbl{font-size:12px !important}
+#main:has(> .list) > .hero .net{font-size:22px !important;margin:4px 0 4px !important}
+#main:has(> .list) > .hero > div:nth-child(3){font-size:12px !important;margin-top:-4px !important;line-height:1.3 !important}
+#main:has(> .list) > .hero .mini{padding:7px 9px !important;border-radius:12px !important}
+#main:has(> .list) > .hero .mini span{font-size:11px !important}
+#main:has(> .list) > .hero .mini b{font-size:13px !important;margin-top:2px !important}
+#main:has(> .list) > .hero .mini-row{gap:8px !important}
+#main:has(> .list) > .info{margin-top:8px !important;padding:8px 12px !important;font-size:12px !important;line-height:1.5 !important;border-radius:14px !important}
+#main:has(> .list) > .info-h, #main:has(> .list) > .info h4{font-size:14px !important;margin:4px 0 2px !important}
+
+/* صفحه مشتریان: بالای صفحه فشرده‌تر تا جای بیشتری برای فهرست باشد */
+#main:has(> .list) > .top .ic, #main:has(> .list) > .top .sp{width:34px !important;height:34px !important}
+#main:has(> .list) > .top{padding:4px 4px 2px !important}
+#main:has(> .list) > .hero:not(:has(.mini-row)){padding:9px 14px !important}
+#main:has(> .list) > .hero:not(:has(.mini-row)) .lbl{font-size:11px !important}
+#main:has(> .list) > .hero:not(:has(.mini-row)) .net{font-size:20px !important;margin:2px 0 0 !important}
+#main:has(> .list) > .search{margin:6px 0 4px}
+#main:has(> .list) > .search input{padding:8px 12px !important}
+
+/* صفحه اصلی مشتریان: ردیف انتخاب طرف حساب در یک خط فشرده */
+#main:has(> .list) > .pick-row{flex-wrap:nowrap !important;overflow-x:auto;gap:6px !important;padding:2px 0 !important;margin:0 0 4px !important;-webkit-overflow-scrolling:touch}
+#main:has(> .list) > .pick-row .pchip{padding:5px 12px !important;font-size:13px !important;white-space:nowrap;flex:0 0 auto}
+#main:has(> .list) > .pick-row .lp-wrap{flex:0 0 auto}
+
+/* صفحه اصلی مشتریان: همه بخش‌های بالای فهرست فشرده و ثابت باشند، فقط فهرست مشتریان بالا برود */
+#main:has(> .list) > *:not(.list){flex:0 0 auto}
+#main:has(> .list) .hero{padding:12px 14px !important;border-radius:20px !important}
+#main:has(> .list) .hero .lbl{font-size:12px !important;margin:0 !important}
+#main:has(> .list) .hero .net{font-size:24px !important;margin:4px 0 6px !important}
+#main:has(> .list) .hero .mini-row{gap:8px !important}
+#main:has(> .list) .hero .mini{padding:7px 9px !important;border-radius:12px !important}
+#main:has(> .list) .hero .mini span{font-size:11px !important}
+#main:has(> .list) .hero .mini b{font-size:13px !important;margin-top:2px !important}
+#main:has(> .list) .opt-list{margin:8px 0 6px !important}
+#main:has(> .list) .opt{padding:10px 14px !important}
+#main:has(> .list) .sec-row{margin:4px 0 !important}
+#main:has(> .list) .live-btn{padding:6px 14px !important;font-size:13px !important}
+#main:has(> .list) .cq-wrap{margin:4px 0 6px !important}
+#main:has(> .list) .cq-wrap input{padding:8px 12px !important}
+
+/* فشرده‌تر: فضای بیشتر برای فهرست مشتریان */
+#main:has(> .list) > .top{padding:2px 4px 0 !important}
+#main:has(> .list) .top .ic,#main:has(> .list) .top .sp{width:30px !important;height:30px !important}
+#main:has(> .list) .top h1,#main:has(> .list) .top .title-btn{font-size:15px !important}
+#main:has(> .list) .hero{padding:8px 12px !important;border-radius:16px !important}
+#main:has(> .list) .hero .lbl{font-size:11px !important}
+#main:has(> .list) .hero .net{font-size:19px !important;margin:2px 0 4px !important}
+#main:has(> .list) .hero .mini{padding:5px 7px !important}
+#main:has(> .list) .hero .mini span{font-size:10px !important}
+#main:has(> .list) .hero .mini b{font-size:12px !important;margin-top:1px !important}
+#main:has(> .list) .opt-list{margin:4px 0 4px !important}
+#main:has(> .list) .opt{padding:7px 12px !important;font-size:14px !important}
+#main:has(> .list) .sec-row{margin:2px 0 !important}
+#main:has(> .list) .sec-title{font-size:15px !important}
+#main:has(> .list) .live-btn{padding:4px 12px !important;font-size:12px !important}
+#main:has(> .list) .cq-wrap{margin:2px 0 4px !important}
+#main:has(> .list) .cq-wrap input{padding:6px 12px !important;font-size:14px !important}
 </style>
 </head>
 <body>
