@@ -335,6 +335,11 @@ html,body{touch-action:pan-x pan-y;-ms-touch-action:pan-x pan-y}
 .mail-ok svg{width:14px;height:14px;stroke:#1e7a4c;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
 .mail-txt small{color:var(--muted);font-size:13px;direction:ltr;text-align:left;overflow-wrap:anywhere;word-break:break-all;white-space:normal}
 .dots-btn{width:40px;height:40px;border-radius:50%;border:0;background:var(--soft);color:var(--deep);font-size:20px;font-weight:700;cursor:pointer;flex:none;line-height:1}
+.nb-row{padding:6px 12px;margin-bottom:6px;gap:8px}
+.nb-row .lg-main{gap:1px}
+.nb-row b{color:#1e78d2;line-height:1.4;font-size:17px}
+.nb-row span,.nb-row p{line-height:1.5;margin:0;color:#1d2b5a}
+.nb-row small{line-height:1.5;margin:0}
 </style>
 </head>
 <body>
@@ -805,15 +810,132 @@ function lpWrap(key, card, acts){
   return `<div class="lp-wrap ${on ? 'on' : ''}">${card}${on ? `<div class="lp-acts">${acts}</div>` : ''}</div>`;
 }
 
+/* ---------- دفتر یادداشت‌ها: دفترچه‌ها و یادداشت‌ها ---------- */
+let NB = [], NY = [], NBLOADED = false, NBLOADING = false, NBTRIED = false;
+let NBFROM = '', NBTO = '', NBQ = '', NBPICK = false, NBCUR = null;
+let NBEXP = new Set();
+let NBSYNCED = false;
+function nbPersist(){
+  try{ localStorage.setItem('hesab-nb-v1', JSON.stringify({ nb: NB, ny: NY })); }catch(e){}
+}
+/* نسخهٔ ذخیره‌شده در گوشی: اگر اینترنت نباشد هم دفترچه‌ها و یادداشت‌ها نشان داده می‌شوند */
+try{
+  const c = JSON.parse(localStorage.getItem('hesab-nb-v1') || 'null');
+  if(c){ NB = Array.isArray(c.nb) ? c.nb : []; NY = Array.isArray(c.ny) ? c.ny : []; }
+}catch(e){}
+async function nbLoad(){
+  if(!supabaseClient || !cloudUser || NBLOADING || !navigator.onLine) return;
+  NBLOADING = true; NBSYNCED = true;
+  let ok = false;
+  try{
+    const u = cloudUser.id;
+    const [a, b] = await Promise.all([
+      supabaseClient.from('nb').select('id,n,ts').eq('u',u),
+      supabaseClient.from('ny').select('id,nb,r,s,b,dt,ts').eq('u',u)
+    ]);
+    if(a.error) throw a.error;
+    if(b.error) throw b.error;
+    NB = (a.data || []).map(x => ({ id:x.id, n:x.n || '', ts:Number(x.ts) || 0 }));
+    NY = (b.data || []).map(x => ({ id:x.id, nb:x.nb, r:Number(x.r) || 0, s:x.s || '', b:x.b || '', dt:x.dt || '', ts:Number(x.ts) || 0 }));
+    ok = true;
+  }catch(e){ console.warn('notebooks load:', e); NBSYNCED = false; }
+  finally{ NBLOADING = false; }
+  if(ok){ nbPersist(); render(); }
+}
+async function nbSaveRow(table, row){
+  if(!supabaseClient || !cloudUser) return false;
+  const { error } = await supabaseClient.from(table).upsert(row, { onConflict:'id' });
+  if(error){ console.warn(error); return false; }
+  return true;
+}
+async function nbDeleteRow(table, id){
+  if(!supabaseClient || !cloudUser) return false;
+  const { error } = await supabaseClient.from(table).delete().eq('id', id).eq('u', cloudUser.id);
+  if(error){ console.warn(error); return false; }
+  return true;
+}
+function nbOnline(){
+  if(!navigator.onLine){ showToast('برای ثبت، اول به انترنت وصل شوید.'); return false; }
+  return true;
+}
+function nbShort(t){ t = t || ''; return t.length > 80 ? t.slice(0, 80) + '…' : t; }
+function nbRowsHTML(b){
+  const q = NBQ.trim().toLowerCase();
+  const all = NY.filter(x => x.nb === b.id);
+  const L = all
+    .filter(x => (!NBFROM || x.dt >= NBFROM) && (!NBTO || x.dt <= NBTO))
+    .filter(x => !q || (x.s || '').toLowerCase().includes(q) || (x.b || '').toLowerCase().includes(q))
+    .sort((x, y) => x.r - y.r);
+  if(!L.length) return `<p class="hint" style="margin:8px 4px">${all.length ? 'یادداشتی پیدا نشد.' : 'هنوز یادداشتی ثبت نشده است.'}</p>`;
+  return L.map(x => {
+    const open = NBEXP.has(x.id);
+    return `<div class="lg-row nb-row">
+      <div class="lg-main" data-a="nbNoteToggle" data-id="${esc(x.id)}" style="cursor:pointer">
+        <b>${x.r}. ${esc(x.s || 'بدون موضوع')}</b>
+        ${open ? `<p style="white-space:pre-wrap;line-height:1.9;margin:6px 0">${esc(x.b)}</p>` : `<span>${esc(nbShort(x.b))}</span>`}
+        <small>${esc(x.dt)}</small>
+      </div>
+      <button class="lg-more" data-a="nbNoteMenu" data-id="${esc(x.id)}" aria-label="گزینه‌ها">⋮</button>
+    </div>`; }).join('');
+}
+function renderNotebooks(m){
+  nbPersist();
+  if(!NBSYNCED && !NBLOADING && cloudUser && navigator.onLine) nbLoad();
+  if(V.view === 'nbList'){
+    m.innerHTML = pageHead('دفترچه‌ها', 'menu') + `
+      <div style="margin-top:8px">
+        ${NB.map(b => `<div class="lg-row">
+            <div class="lg-main" data-a="nbOpen" data-p="${esc(b.id)}" style="cursor:pointer">
+              <b>${esc(b.n)}</b>
+              <small>${NY.filter(x => x.nb === b.id).length} یادداشت</small>
+            </div>
+            <button class="lg-more" data-a="nbMenu" data-p="${esc(b.id)}" aria-label="گزینه‌ها">⋮</button>
+          </div>`).join('')}
+      </div>
+      ${NB.length ? '' : '<div class="empty">هنوز دفترچه‌ای ساخته نشده است.</div>'}
+      <button class="fab" data-a="nbAdd">${ICON.plus}<span>افزودن دفترچه</span></button>`;
+    return;
+  }
+  const b = NB.find(x => x.id === V.openId);
+  if(!b){ goTo({view:'nbList'}, true); return; }
+  m.innerHTML = `
+    <header class="top">
+      <span class="sp"></span>
+      <button class="title-btn" data-a="nbPickToggle">${esc(b.n)} <span class="caret">${NBPICK ? '▴' : '▾'}</span></button>
+      <span class="sp"></span>
+    </header>
+    ${NBPICK ? `<div class="pick-row">
+      ${NB.map(x => `<button class="pchip ${x.id === b.id ? 'on' : ''}" data-a="nbSwitch" data-p="${esc(x.id)}"><span class="rd"></span><span>${esc(x.n)}</span></button>`).join('')}
+      <button class="pchip add" data-a="nbAdd">${ICON.plus}<span>افزودن دفترچه</span></button>
+    </div>` : ''}
+    ${NBPICK ? '' : `    <div class="lg-bar">
+      <input id="nbq" type="search" placeholder="جستجو در موضوع یا متن..." value="${esc(NBQ)}">
+      <button type="button" class="ic" data-a="nbCalOpen" aria-label="فیلتر تاریخ">${ICON.cal}</button>
+    </div>
+    ${(NBFROM || NBTO) ? `<div class="hint" style="margin:8px 4px">یادداشت‌ها از ${esc(NBFROM || '…')} تا ${esc(NBTO || '…')} <button class="pbtn" data-a="nbClearDate"><span>نمایش همه</span></button></div>` : ''}
+    <div id="nbRows" style="margin-top:10px">${nbRowsHTML(b)}</div>
+    <button class="fab" data-a="nbNoteOpen" data-p="${esc(b.id)}">${ICON.plus}<span>افزودن یادداشت</span></button>`}`;
+}
+window.addEventListener('online', () => { NBSYNCED = false; nbLoad(); });
+document.addEventListener('input', e => {
+  if(e.target.id !== 'nbq') return;
+  NBQ = e.target.value;
+  const box = document.getElementById('nbRows');
+  const b = NB.find(x => x.id === V.openId);
+  if(box && b) box.innerHTML = nbRowsHTML(b);
+});
+
 function render(){
   const m = document.getElementById('main');
   if(V.view === 'detail') V.view = 'list';
   if(LPSEL && LPSEL.view !== V.view) LPSEL = null;
+  if(V.view === 'nbList' || V.view === 'nbook'){ renderNotebooks(m); return; }
 
   if(V.view === 'menu'){
     m.innerHTML = pageHead('منو', 'list') + `
       <div class="opt-list">
         <button class="opt" data-a="openSettings"><span>تنظیمات</span><span class="sub">${ICON.chev}</span></button>
+        <button class="opt" data-a="nbListOpen"><span>دفتر یادداشت‌ها</span><span class="sub">${ICON.chev}</span></button>
       </div>`;
     return;
   }
@@ -3264,6 +3386,203 @@ document.addEventListener('click', async e => {
       if(LPSEL) LPSEL.cur = false;
       render(); break;
     }
+    case 'nbListOpen': {
+      const cur = NB.find(x => x.id === NBCUR);
+      if(cur){ goTo({view:'nbook', openId: cur.id}); }
+      else goTo({view:'nbList'});
+      break;
+    }
+    case 'nbOpen': NBCUR = el.dataset.p; NBPICK = false; NBQ = ''; NBFROM = ''; NBTO = ''; goTo({view:'nbook', openId: el.dataset.p}); break;
+    case 'nbSwitch': NBCUR = el.dataset.p; NBPICK = false; NBQ = ''; NBFROM = ''; NBTO = ''; goTo({view:'nbook', openId: el.dataset.p}, true); break;
+    case 'nbPickToggle': NBPICK = !NBPICK; render(); break;
+    case 'nbAdd': openSheet(sheetHead('افزودن دفترچه') + `
+      <label for="f-nbn">نام دفترچه</label>
+      <input id="f-nbn" maxlength="60">
+      <button class="btn pri-btn" data-a="nbSave">ذخیره</button>`); break;
+    case 'nbSave': {
+      const n = val('f-nbn').trim();
+      if(!n){ document.getElementById('f-nbn').focus(); return; }
+      if(!nbOnline()) return;
+      const row = { id: uid(), u: cloudUser ? cloudUser.id : null, n, ts: Date.now() };
+      el.classList.add('busy');
+      const ok = await nbSaveRow('nb', row);
+      el.classList.remove('busy');
+      if(!ok){ showToast('ثبت دفترچه انجام نشد. دوباره تلاش کنید.'); return; }
+      NB.push({ id: row.id, n, ts: row.ts });
+      NBCUR = row.id; NBPICK = false; NBQ = ''; NBFROM = ''; NBTO = '';
+      closeSheet();
+      goTo({view:'nbook', openId: row.id});
+      playBell(); showToast('دفترچه ساخته شد', true);
+      break;
+    }
+    case 'nbMenu': {
+      const b = NB.find(x => x.id === el.dataset.p);
+      if(!b) break;
+      openSheet(sheetHead(esc(b.n)) + `<div class="opt-list">
+        <button class="opt" data-a="nbEditOpen" data-p="${esc(b.id)}"><span>ویرایش</span></button>
+        <button class="opt" data-a="nbDelOpen" data-p="${esc(b.id)}"><span>حذف</span></button>
+      </div>`); break;
+    }
+    case 'nbEditOpen': {
+      const b = NB.find(x => x.id === el.dataset.p);
+      if(!b) break;
+      openSheet(sheetHead('ویرایش دفترچه') + `
+        <label for="f-nbe">نام دفترچه</label>
+        <input id="f-nbe" maxlength="60" value="${esc(b.n)}">
+        <button class="btn pri-btn" data-a="nbRename" data-p="${esc(b.id)}">ذخیره</button>`); break;
+    }
+    case 'nbRename': {
+      const n = val('f-nbe').trim();
+      if(!n){ document.getElementById('f-nbe').focus(); return; }
+      if(!nbOnline()) return;
+      const b = NB.find(x => x.id === el.dataset.p);
+      if(!b) return;
+      el.classList.add('busy');
+      const ok = await nbSaveRow('nb', { id: b.id, u: cloudUser ? cloudUser.id : null, n, ts: b.ts });
+      el.classList.remove('busy');
+      if(!ok){ showToast('ویرایش دفترچه انجام نشد.'); return; }
+      b.n = n;
+      closeSheet(); render(); showToast('دفترچه ویرایش شد', true);
+      break;
+    }
+    case 'nbDelOpen': {
+      const b = NB.find(x => x.id === el.dataset.p);
+      if(!b) break;
+      openSheet(sheetHead('حذف دفترچه') + `
+        <p class="hint">با حذف این دفترچه، همهٔ یادداشت‌های آن هم پاک می‌شود. برای تایید، کلمهٔ «حذف» را بنویسید.</p>
+        <input id="f-del" placeholder="حذف">
+        <button class="btn danger" data-a="nbDelete" data-p="${esc(b.id)}">حذف</button>`); break;
+    }
+    case 'nbDelete': {
+      if(val('f-del').trim() !== 'حذف'){ showToast('برای حذف، کلمهٔ «حذف» را دقیق بنویسید.'); return; }
+      if(!nbOnline()) return;
+      const id = el.dataset.p;
+      el.classList.add('busy');
+      const ok = await nbDeleteRow('nb', id);
+      el.classList.remove('busy');
+      if(!ok){ showToast('حذف انجام نشد. دوباره تلاش کنید.'); return; }
+      NB = NB.filter(x => x.id !== id);
+      NY = NY.filter(x => x.nb !== id);
+      if(NBCUR === id) NBCUR = null;
+      closeSheet();
+      goTo({view:'nbList'}, true);
+      showToast('دفترچه حذف شد', true);
+      break;
+    }
+    case 'nbCalOpen': openSheet(sheetHead('فیلتر تاریخ') + `
+      <label>از تاریخ</label>
+      <button type="button" class="dbtn" data-a="nbCalPick" data-v="from"><span id="nbf-t">${esc(NBFROM) || 'انتخاب'}</span><span class="cal-ic">${ICON.cal}</span></button>
+      <label>تا تاریخ</label>
+      <button type="button" class="dbtn" data-a="nbCalPick" data-v="to"><span id="nbt-t">${esc(NBTO) || 'انتخاب'}</span><span class="cal-ic">${ICON.cal}</span></button>
+      <button class="btn pri-btn" data-a="nbFilterApply">اعمال</button>
+      <button class="btn" data-a="nbFilterClear">پاک کردن فیلتر</button>`); break;
+    case 'nbCalPick': {
+      const cur = el.dataset.v === 'from' ? NBFROM : NBTO;
+      const d = (cur && parseDate(cur)) || today();
+      if(!OV.includes('cal')) pushOv('cal');
+      CAL = { open:true, mode:'days', sel:{ y:d.y, m:d.m, d:d.d }, vy:d.y, vm:d.m, tgt: el.dataset.v === 'from' ? 'nbFrom' : 'nbTo' };
+      calRender(); break;
+    }
+    case 'nbFilterApply': closeSheet(); render(); break;
+    case 'nbFilterClear': NBFROM = ''; NBTO = ''; closeSheet(); render(); break;
+    case 'nbClearDate': NBFROM = ''; NBTO = ''; render(); break;
+    case 'nbNoteOpen': openSheet(sheetHead('افزودن یادداشت') + `
+      <label for="f-ns">موضوع</label>
+      <input id="f-ns" maxlength="120">
+      <label for="f-nb">یادداشت</label>
+      <textarea id="f-nb" rows="5"></textarea>
+      <label>تاریخ (اختیاری، اگر خالی بماند تاریخ امروز ثبت می‌شود)</label>
+      <button type="button" class="dbtn" data-a="calOpen"><span id="dtxt">${todayStr()}</span><span class="cal-ic">${ICON.cal}</span></button>
+      <input type="hidden" id="f-date" value="${todayStr()}">
+      <button class="btn pri-btn" data-a="nbNoteSave" data-p="${esc(V.openId)}">تایید</button>`); break;
+    case 'nbNoteSave': {
+      const s = val('f-ns').trim(), bt = val('f-nb').trim();
+      if(!s && !bt){ document.getElementById('f-nb').focus(); return; }
+      if(!nbOnline()) return;
+      const bid = el.dataset.p;
+      const r = NY.filter(x => x.nb === bid).reduce((mx, x) => Math.max(mx, x.r), 0) + 1;
+      const dt = val('f-date') || todayStr();
+      const row = { id: uid(), u: cloudUser ? cloudUser.id : null, nb: bid, r, s, b: bt, dt, ts: Date.now() };
+      el.classList.add('busy');
+      const ok = await nbSaveRow('ny', row);
+      el.classList.remove('busy');
+      if(!ok){ showToast('ثبت یادداشت انجام نشد. دوباره تلاش کنید.'); return; }
+      NY.push({ id: row.id, nb: bid, r, s, b: bt, dt, ts: row.ts });
+      closeSheet(); render();
+      playBell(); showToast('یادداشت ثبت شد', true);
+      break;
+    }
+    case 'nbNoteToggle': {
+      const id = el.dataset.id;
+      if(NBEXP.has(id)) NBEXP.delete(id); else NBEXP.add(id);
+      const box = document.getElementById('nbRows');
+      const b = NB.find(x => x.id === V.openId);
+      if(box && b) box.innerHTML = nbRowsHTML(b);
+      break;
+    }
+    case 'nbNoteView': {
+      const x = NY.find(n => n.id === el.dataset.id);
+      if(!x) break;
+      openSheet(sheetHead(`${x.r}. ${esc(x.s || 'بدون موضوع')}`) + `
+        <small style="color:var(--muted)">${esc(x.dt)}</small>
+        <p style="white-space:pre-wrap;line-height:1.9;margin:12px 4px">${esc(x.b)}</p>`); break;
+    }
+    case 'nbNoteMenu': {
+      const x = NY.find(n => n.id === el.dataset.id);
+      if(!x) break;
+      openSheet(sheetHead(`${x.r}. ${esc(x.s || 'بدون موضوع')}`) + `<div class="opt-list">
+        <button class="opt" data-a="nbNoteEdit" data-id="${esc(x.id)}"><span>ویرایش</span></button>
+        <button class="opt" data-a="nbNoteDelOpen" data-id="${esc(x.id)}"><span>حذف</span></button>
+      </div>`); break;
+    }
+    case 'nbNoteEdit': {
+      const x = NY.find(n => n.id === el.dataset.id);
+      if(!x) break;
+      openSheet(sheetHead('ویرایش یادداشت') + `
+        <label for="f-ns">موضوع</label>
+        <input id="f-ns" maxlength="120" value="${esc(x.s)}">
+        <label for="f-nb">یادداشت</label>
+        <textarea id="f-nb" rows="5">${esc(x.b)}</textarea>
+        <label>تاریخ</label>
+        <button type="button" class="dbtn" data-a="calOpen"><span id="dtxt">${esc(x.dt)}</span><span class="cal-ic">${ICON.cal}</span></button>
+        <input type="hidden" id="f-date" value="${esc(x.dt)}">
+        <button class="btn pri-btn" data-a="nbNoteUpdate" data-id="${esc(x.id)}">ذخیره تغییرات</button>`); break;
+    }
+    case 'nbNoteUpdate': {
+      const s = val('f-ns').trim(), bt = val('f-nb').trim();
+      if(!s && !bt){ document.getElementById('f-nb').focus(); return; }
+      if(!nbOnline()) return;
+      const x = NY.find(n => n.id === el.dataset.id);
+      if(!x) return;
+      const dt = val('f-date') || todayStr();
+      el.classList.add('busy');
+      const ok = await nbSaveRow('ny', { id: x.id, u: cloudUser ? cloudUser.id : null, nb: x.nb, r: x.r, s, b: bt, dt, ts: x.ts });
+      el.classList.remove('busy');
+      if(!ok){ showToast('ویرایش یادداشت انجام نشد.'); return; }
+      Object.assign(x, { s, b: bt, dt });
+      closeSheet(); render(); playBell(); showToast('یادداشت ویرایش شد', true);
+      break;
+    }
+    case 'nbNoteDelOpen': {
+      const x = NY.find(n => n.id === el.dataset.id);
+      if(!x) break;
+      openSheet(sheetHead('حذف یادداشت') + `
+        <p class="hint">برای تایید حذف، کلمهٔ «حذف» را بنویسید.</p>
+        <input id="f-del" placeholder="حذف">
+        <button class="btn danger" data-a="nbNoteDelete" data-id="${esc(x.id)}">حذف</button>`); break;
+    }
+    case 'nbNoteDelete': {
+      if(val('f-del').trim() !== 'حذف'){ showToast('برای حذف، کلمهٔ «حذف» را دقیق بنویسید.'); return; }
+      if(!nbOnline()) return;
+      const id = el.dataset.id;
+      el.classList.add('busy');
+      const ok = await nbDeleteRow('ny', id);
+      el.classList.remove('busy');
+      if(!ok){ showToast('حذف یادداشت انجام نشد.'); return; }
+      NY = NY.filter(x => x.id !== id);
+      closeSheet(); render(); showToast('یادداشت حذف شد', true);
+      break;
+    }
     case 'addParty': openSheet(SHEETS.partyAdd()); break;
     case 'saveParty': {
       const n = val('f-name').trim();
@@ -3500,6 +3819,13 @@ document.addEventListener('click', async e => {
       const okD = Math.min(CAL.sel.d, daysIn(CAL.vy, CAL.vm));
       CAL.sel = { y: CAL.vy, m: CAL.vm, d: okD };
       const s = jStr(CAL.sel.y, CAL.sel.m, CAL.sel.d);
+      if(CAL.tgt === 'nbFrom' || CAL.tgt === 'nbTo'){
+        const isF = CAL.tgt === 'nbFrom';
+        if(isF) NBFROM = s; else NBTO = s;
+        CAL.tgt = null;
+        const sp = document.getElementById(isF ? 'nbf-t' : 'nbt-t'); if(sp) sp.textContent = s;
+        closeCal(); break;
+      }
       if(CAL.tgt){
         const o = { y: CAL.sel.y, m: CAL.sel.m, d: CAL.sel.d };
         if(CAL.tgt === 'from') LGFR = o; else LGTO = o;
