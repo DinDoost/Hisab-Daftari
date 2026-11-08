@@ -424,6 +424,36 @@ body:has(#main > .list), body:has(#main > .lg-scroll), body:has(#main > #nbRows)
 .pt-list{flex:1 1 0;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-bottom:calc(40px + env(safe-area-inset-bottom,0px));margin-top:0 !important}
 /* فاصله تراکنش‌ها از کارت شماره تلفن در صفحه مشتری داخل برنامه */
 #main:has(> .list) .sec-title{margin-top:24px !important}
+
+/* فهرست طرف حساب‌ها: فضای کافی پایین تا دکمه شناور روی ⋮ مشتری آخر نیفتد */
+#main:has(> .list) > .list{padding-bottom:170px !important}
+
+/* دکمه شناور «افزودن مشتری»: فهرست زیر آن یک نوار محو دارد، پس سه‌نقطه‌ی مشتری‌ها زیر دکمه محو می‌شود و روی آن نمی‌ماند */
+#main:has(> .list)::after{content:"";position:fixed;left:0;right:0;bottom:0;height:110px;background:linear-gradient(to top,var(--bg) 55%,rgba(243,246,250,0));pointer-events:none;z-index:4}
+.fab{z-index:5}
+
+/* طرف حساب‌ها: جستجوی مشتری بالاتر (نزدیک دخل و خرج)، کمی به چپ، و عنوان «مشتریان» داخل قالب جستجو در ابتدا */
+.cq-wrap{position:relative;display:flex;align-items:center;margin:0 0 10px;padding-left:24px;padding-right:4px}
+.cq-wrap input{flex:1;min-width:0}
+.cq-lbl{font-size:15px;font-weight:700;color:var(--text);white-space:nowrap;margin-left:10px;margin-right:4px}
+#main:has(> .list) .cq-wrap{margin:0 0 6px;padding-left:24px}
+#main:has(> .list) .sec-title{display:none}
+
+/* قالب جستجوی مشتری: بزرگ‌تر، و لبه‌ی راست و چپش دقیقاً با قالب دخل و خرج شخصی یکی است */
+#main:has(> .list) .cq-wrap{margin:0 0 10px !important;padding:0 !important;width:100%;display:flex;align-items:center;gap:8px}
+#main:has(> .list) .cq-wrap input{padding:15px 16px !important;font-size:16px !important;min-height:54px;border-radius:16px !important}
+#main:has(> .list) .cq-lbl{font-size:16px !important;margin:0 4px 0 0 !important;padding-right:4px}
+
+/* فهرست مشتریان بالا می‌رود و درست از زیر قالب جستجو رد می‌شود؛ عنوان «مشتریان» هم قالب کوچک خودش را دارد */
+#main:has(> .list) > .list{margin-top:0 !important;padding-top:0 !important}
+#main:has(> .list) .cq-wrap{margin:0 0 6px !important}
+#main:has(> .list) .cq-lbl{display:inline-flex;align-items:center;flex:none;background:#fff;border:1px solid var(--line);border-radius:12px;padding:9px 12px;font-size:13px !important;font-weight:700;color:var(--deep);margin:0 !important;line-height:1}
+
+/* «مشتریان» در قالبی هم‌اندازه‌ی قالب جستجو و جدا از آن؛ متن جستجو کامل دیده می‌شود */
+#main:has(> .list) .cq-wrap{gap:10px !important;align-items:stretch !important;margin:0 0 8px !important}
+#main:has(> .list) .cq-lbl{width:104px;min-height:54px;height:54px;border-radius:16px !important;font-size:15px !important;padding:0 10px !important;justify-content:center;box-sizing:border-box}
+#main:has(> .list) .cq-wrap input{flex:1 1 auto;width:auto !important;min-width:0;height:54px;min-height:54px !important;padding:0 14px !important;font-size:14px !important;box-sizing:border-box;border-radius:16px !important}
+#main:has(> .list) .cq-wrap input::placeholder{font-size:14px}
 </style>
 </head>
 <body>
@@ -831,6 +861,7 @@ function resetToList(){
 }
 function goTo(next, replace){
   const st = Object.assign({view:'list', openId:null, custId:null, search:false, q:''}, next);
+  try{ if(st.view === 'nbook' && st.openId){ localStorage.setItem('hesab-nb-cur', JSON.stringify({id: st.openId})); } else if(st.view === 'nbList'){ localStorage.removeItem('hesab-nb-cur'); } }catch(e){}
   if(replace) history.replaceState({v:st}, ''); else { history.pushState({v:st}, ''); soundForward(); }
   V = st; LPSEL = null; render(); window.scrollTo(0,0);
 }
@@ -907,6 +938,8 @@ function lpWrap(key, card, acts){
 /* ---------- دفتر یادداشت‌ها: دفترچه‌ها و یادداشت‌ها ---------- */
 let NB = [], NY = [], NBLOADED = false, NBLOADING = false, NBTRIED = false;
 let NBFROM = '', NBTO = '', NBQ = '', NBPICK = false, NBCUR = null;
+/* دفترچه‌ی باز را در گوشی نگه می‌داریم تا بعد از بیرون رفتن یا بارگذاری دوباره، همان دفترچه باز بماند */
+try{ const _nb = JSON.parse(localStorage.getItem('hesab-nb-cur') || 'null'); if(_nb && _nb.id){ NBCUR = _nb.id; } }catch(e){}
 let NBEXP = new Set();
 if(window.__rs){ NBCUR = window.__rs.NBCUR || null; NBPICK = !!window.__rs.NBPICK; window.__rs = null; }
 let NBSYNCED = false;
@@ -1064,6 +1097,12 @@ window.addEventListener('online', () => { NBSYNCED = false; nbLoad(); });
   window.addEventListener('online', () => setTimeout(check, 1500));
   document.addEventListener('visibilitychange', () => { if(!document.hidden) check(); });
 })();
+/* وقتی برنامه دوباره فعال می‌شود و دفترچه‌ای باز بوده، همان دفترچه را نشان می‌دهد */
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden) return;
+  try{ const _nb = JSON.parse(localStorage.getItem('hesab-nb-cur') || 'null');
+    if(_nb && _nb.id && V.view === 'nbList' && !OV.length){ NBCUR = _nb.id; goTo({view:'nbook', openId:_nb.id}, true); } }catch(e){}
+});
 /* وقتی کیبورد باز می‌شود، محل نوشتن را در وسط صفحه نگه می‌دارد */
 document.addEventListener('focusin', e => {
   if(e.target.matches && e.target.matches('#sheet textarea, #sheet input')){
@@ -1819,9 +1858,9 @@ function partySection(p){
       </section>
       ${on ? `<div class="lp-acts hero-acts"><button class="lp-btn" data-a="lpEdit" data-k="party" data-p="${p.id}" aria-label="ویرایش">${ICON.edit}</button></div>` : ''}
     </div>
-    <div class="opt-list" style="margin:18px 0 14px"><button class="opt" data-a="ledgerOpen"><span>دخل و خرج شخصی</span><span class="sub">${ICON.chev}</span></button></div>
-    <div class="sec-row"><div class="sec-title">مشتریان</div><button class="live-btn" data-a="portalOpen">صورت حساب زنده</button></div>
-    <div class="cq-wrap"><input id="cq" type="search" placeholder="جستجوی مشتری با نام یا شماره تلفن..." value="${esc(V.q)}"></div>
+    <div class="opt-list" style="margin:14px 0 8px"><button class="opt" data-a="ledgerOpen"><span>دخل و خرج شخصی</span><span class="sub">${ICON.chev}</span></button></div>
+    
+    <div class="cq-wrap"><span class="cq-lbl">مشتریان</span><input id="cq" type="search" placeholder="جستجوی نام یا شماره تلفن..." value="${esc(V.q)}"></div>
     <div class="list">
       ${custs.length ? custs.map(c => {
         const b = custBal(c), col = colorFor(c.n);
@@ -2055,6 +2094,7 @@ function renderLock(){
   LK.shake = false;
 }
 function lkUnlock(){
+  startLive();
   try{ sessionStorage.setItem('hisab_unlocked', '1'); }catch(e){}
   LK.locked = false; LK.buf = ''; LK.err = ''; LK.showPad = false; LK.fromSettings = false;
   renderLock(); soundForward(); render();
@@ -4091,10 +4131,55 @@ async function refreshCloudQuiet(){
     await cloudLoad();
     cloudReady = true; S.loggedIn = true;
     render();
+    startLive();
   }catch(e){
     console.warn('cloud refresh skipped (offline?):', e);
   }
 }
+
+/* ---------- همگام‌سازی لحظه‌ای بین گوشی‌ها (Supabase Realtime) ---------- */
+let LIVE_CH = null, LIVE_T = null, LIVE_UID = null;
+function startLive(){
+  if(!supabaseClient || !cloudUser) return;
+  if(LIVE_CH && LIVE_UID === cloudUser.id) return;
+  if(LIVE_CH){ try{ supabaseClient.removeChannel(LIVE_CH); }catch(e){} }
+  const uid = cloudUser.id;
+  LIVE_UID = uid;
+  const sub = table => ({ event:'*', schema:'public', table, filter:'u=eq.' + uid });
+  try{
+    LIVE_CH = supabaseClient.channel('hisab-live-' + uid)
+      .on('postgres_changes', sub('p'), liveKick)
+      .on('postgres_changes', sub('c'), liveKick)
+      .on('postgres_changes', sub('t'), liveKick)
+      .on('postgres_changes', sub('l'), liveKick)
+      .on('postgres_changes', sub('nb'), liveKick)
+      .on('postgres_changes', sub('ny'), liveKick)
+      .subscribe();
+  }catch(e){ console.warn('realtime:', e); }
+}
+function liveKick(){
+  clearTimeout(LIVE_T);
+  LIVE_T = setTimeout(liveRefresh, 400);
+}
+function liveUIBusy(){
+  const ov = document.querySelector('.overlay:not(.hidden)');
+  const pt = document.getElementById('portal');
+  const ae = document.activeElement;
+  return !!ov || (pt && !pt.classList.contains('hidden')) || (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName));
+}
+async function liveRefresh(){
+  if(!cloudUser || !supabaseClient || !navigator.onLine) return;
+  /* اگر همین گوشی در حال ثبت است، کمی صبر می‌کنیم تا تغییر خودش گم نشود */
+  if(WRITING || cloudSyncing || NBLOADING){ clearTimeout(LIVE_T); LIVE_T = setTimeout(liveRefresh, 1200); return; }
+  /* وسط نوشتن در فرم یا باز بودن پنجره، صفحه را دست نمی‌زنیم */
+  if(liveUIBusy()){ clearTimeout(LIVE_T); LIVE_T = setTimeout(liveRefresh, 2000); return; }
+  try{
+    await cloudLoad();
+    await nbLoad();
+    if(!LK.locked) render();
+  }catch(e){ console.warn('live refresh:', e); }
+}
+
 async function initCloudSession(){
   if(!supabaseClient){
     /* کتابخانه ابری در دسترس نیست (مثلاً آفلاین): اگر قبلاً وارد شده‌اید، با PIN و اطلاعات ذخیره‌شده باز شود */
