@@ -413,6 +413,59 @@ body:has(#main > .list), body:has(#main > #nbRows){overflow:hidden}
 #main:has(> .list) .live-btn{padding:4px 12px !important;font-size:12px !important}
 #main:has(> .list) .cq-wrap{margin:2px 0 4px !important}
 #main:has(> .list) .cq-wrap input{padding:6px 12px !important;font-size:14px !important}
+
+/* دخل و خرج: فقط تراکنش‌ها بالا بروند، بالای صفحه ثابت و فشرده بماند */
+body:has(#main > .lg-scroll){overflow:hidden}
+#main:has(> .lg-scroll){height:100dvh;height:100vh;display:flex;flex-direction:column;overflow:hidden;padding-bottom:0}
+#main > *:not(.lg-scroll){flex:0 0 auto}
+#main > .lg-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:120px}
+#main:has(> .lg-scroll) > .top{padding:2px 4px 0 !important}
+#main:has(> .lg-scroll) .top .ic{width:30px !important;height:30px !important}
+#main:has(> .lg-scroll) .top h1{font-size:15px !important}
+#main:has(> .lg-scroll) .cb-hero{padding:8px 12px !important;border-radius:16px !important}
+#main:has(> .lg-scroll) .cb-lbl{font-size:11px !important}
+#main:has(> .lg-scroll) .cb-net{font-size:20px !important;margin:2px 0 4px !important}
+#main:has(> .lg-scroll) .cb-cards{gap:6px !important;margin-top:4px !important}
+#main:has(> .lg-scroll) .cb-card{padding:5px 8px !important}
+#main:has(> .lg-scroll) .cb-card span{font-size:10px !important}
+#main:has(> .lg-scroll) .cb-card b{font-size:12px !important}
+#main:has(> .lg-scroll) .lg-bar{margin:6px 0 0 !important}
+#main:has(> .lg-scroll) .lg-bar input{padding:6px 12px !important;font-size:14px !important}
+#main:has(> .lg-scroll) .lg-fbtn{padding:6px 12px !important;font-size:13px !important}
+#main:has(> .lg-scroll) .sec-row{margin:4px 0 2px !important}
+#main:has(> .lg-scroll) .lg-filt button{padding:4px 12px !important;font-size:13px !important}
+
+/* دخل و خرج: بخش بالا فشرده‌تر تا تراکنش‌ها جای بیشتری داشته باشند */
+#main:has(> .lg-scroll) > .top .ic{width:28px !important;height:28px !important}
+#main:has(> .lg-scroll) > .top{padding:0 4px !important}
+#main:has(> .lg-scroll) .cb-hero{padding:6px 12px !important;border-radius:14px !important}
+#main:has(> .lg-scroll) .cb-lbl{font-size:10px !important;line-height:1.2 !important}
+#main:has(> .lg-scroll) .cb-net{font-size:17px !important;margin:0 0 3px !important;line-height:1.3 !important}
+#main:has(> .lg-scroll) .cb-cards{gap:6px !important}
+#main:has(> .lg-scroll) .cb-card{padding:3px 8px !important;border-radius:10px !important}
+#main:has(> .lg-scroll) .cb-card span{font-size:9px !important;line-height:1.2 !important}
+#main:has(> .lg-scroll) .cb-card b{font-size:11px !important;line-height:1.3 !important}
+#main:has(> .lg-scroll) .lg-bar{margin:4px 0 0 !important;gap:6px !important}
+#main:has(> .lg-scroll) .lg-bar input{padding:4px 10px !important;font-size:13px !important;border-radius:12px !important}
+#main:has(> .lg-scroll) .lg-fbtn{padding:4px 10px !important;font-size:12px !important}
+#main:has(> .lg-scroll) .sec-row{margin:2px 0 0 !important}
+#main:has(> .lg-scroll) .lg-filt button{padding:2px 10px !important;font-size:12px !important}
+#main:has(> .lg-scroll) > .lg-scroll{padding-top:4px !important}
+
+/* دخل و خرج: کمی بزرگ‌تر از حالت فشرده */
+#main:has(> .lg-scroll) > .top .ic{width:32px !important;height:32px !important}
+#main:has(> .lg-scroll) > .top h1{font-size:16px !important}
+#main:has(> .lg-scroll) .cb-hero{padding:9px 14px !important}
+#main:has(> .lg-scroll) .cb-lbl{font-size:12px !important}
+#main:has(> .lg-scroll) .cb-net{font-size:21px !important;margin:2px 0 6px !important}
+#main:has(> .lg-scroll) .cb-card{padding:5px 10px !important}
+#main:has(> .lg-scroll) .cb-card span{font-size:11px !important}
+#main:has(> .lg-scroll) .cb-card b{font-size:13px !important}
+#main:has(> .lg-scroll) .lg-bar{margin:8px 0 0 !important}
+#main:has(> .lg-scroll) .lg-bar input{padding:7px 12px !important;font-size:14px !important}
+#main:has(> .lg-scroll) .lg-fbtn{padding:7px 12px !important;font-size:13px !important}
+#main:has(> .lg-scroll) .sec-row{margin:6px 0 4px !important}
+#main:has(> .lg-scroll) .lg-filt button{padding:5px 14px !important;font-size:13px !important}
 </style>
 </head>
 <body>
@@ -733,6 +786,16 @@ async function commitWrite(mutate, okMsg, btn){
 }
 let S = load();
 let V = { view:'list', openId:null, custId:null, search:false, q:'' };
+/* بعد از بروزرسانی خودکار، همان صفحه‌ای که بودید دوباره باز می‌شود */
+try{
+  const rs = JSON.parse(sessionStorage.getItem('hesab-resume') || 'null');
+  sessionStorage.removeItem('hesab-resume');
+  if(rs){
+    V.view = rs.view || V.view; V.openId = rs.openId || null; V.custId = rs.custId || null;
+    V.search = !!rs.search; V.q = rs.q || '';
+    window.__rs = rs;
+  }
+}catch(e){}
 let SUI = { curOpen:false };
 let CAL = { open:false, mode:'days', sel:{y:0,m:1,d:1}, vy:0, vm:1 };
 let LPSEL = null;     /* long-press selection: {key, view, kind, pid, cid, tid} */
@@ -887,6 +950,7 @@ function lpWrap(key, card, acts){
 let NB = [], NY = [], NBLOADED = false, NBLOADING = false, NBTRIED = false;
 let NBFROM = '', NBTO = '', NBQ = '', NBPICK = false, NBCUR = null;
 let NBEXP = new Set();
+if(window.__rs){ NBCUR = window.__rs.NBCUR || null; NBPICK = !!window.__rs.NBPICK; window.__rs = null; }
 let NBSYNCED = false;
 function nbPersist(){
   try{ localStorage.setItem('hesab-nb-v1', JSON.stringify({ nb: NB, ny: NY })); }catch(e){}
@@ -996,6 +1060,52 @@ function renderNotebooks(m){
     <button class="fab" data-a="nbNoteOpen" data-p="${esc(b.id)}">${ICON.plus}<span>افزودن یادداشت</span></button>`}`;
 }
 window.addEventListener('online', () => { NBSYNCED = false; nbLoad(); });
+/* بروزرسانی خودکار: اگر فایل جدید در سرور باشد، بدون کشیدن صفحه، برنامه خودش بروز می‌شود */
+(function autoUpdate(){
+  const KEY = 'hesab-build';
+  const url = location.href.split('#')[0];
+  function busy(){
+    const ov = document.getElementById('ov');
+    if(ov && !ov.classList.contains('hidden')) return true;
+    const a = document.activeElement;
+    if(a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA')) return true;
+    return false;
+  }
+  async function buildId(){
+    try{
+      const r = await fetch(url, { method:'HEAD', cache:'no-store' });
+      return r.headers.get('etag') || r.headers.get('last-modified') || '';
+    }catch(e){ return ''; }
+  }
+  function resumeAndReload(){
+    sessionStorage.setItem('hesab-resume', JSON.stringify({
+      view:V.view, openId:V.openId, custId:V.custId, search:V.search, q:V.q, NBCUR:NBCUR, NBPICK:NBPICK
+    }));
+    location.reload();
+  }
+  let waiting = false;
+  async function check(){
+    if(!navigator.onLine) return;
+    const b = await buildId();
+    if(!b) return;
+    const saved = localStorage.getItem(KEY);
+    if(!saved){ localStorage.setItem(KEY, b); return; }
+    if(saved === b) return;
+    if(busy()){
+      if(!waiting){
+        waiting = true;
+        const t = setInterval(() => { if(!busy()){ clearInterval(t); waiting = false; check(); } }, 3000);
+      }
+      return;
+    }
+    localStorage.setItem(KEY, b);
+    resumeAndReload();
+  }
+  setTimeout(check, 4000);
+  setInterval(check, 60000);
+  window.addEventListener('online', () => setTimeout(check, 1500));
+  document.addEventListener('visibilitychange', () => { if(!document.hidden) check(); });
+})();
 /* وقتی کیبورد باز می‌شود، محل نوشتن را در وسط صفحه نگه می‌دارد */
 document.addEventListener('focusin', e => {
   if(e.target.matches && e.target.matches('#sheet textarea, #sheet input')){
@@ -1065,7 +1175,7 @@ function render(){
           <button data-a="lgFilter" data-v="in" class="g ${LGF === 'in' ? 'on' : ''}">دخل</button>
         </div>
       </div>
-      ${LS.length ? LS.map(x => `
+      <div class="lg-scroll">${LS.length ? LS.map(x => `
         <div class="lg-row">
           <div class="lg-main">
             <b class="${x.type === 'in' ? 'cb-in' : 'cb-out'}">${x.type === 'in' ? 'دخل' : 'خرج'} ${money(x.a)}</b>
@@ -1077,7 +1187,7 @@ function render(){
         ${LG.sel === x.id ? `<div class="lg-acts">
           <button data-a="ledgerEdit" data-id="${esc(x.id)}">ویرایش</button>
           <button class="del" data-a="ledgerDel" data-id="${esc(x.id)}">حذف</button>
-        </div>` : ''}`).join('') : `<p class="hint" style="margin:8px 4px">${L.length ? 'تراکنشی در این بخش نیست.' : 'هنوز چیزی ثبت نشده است.'}</p>`}`;
+        </div>` : ''}`).join('') : `<p class="hint" style="margin:8px 4px">${L.length ? 'تراکنشی در این بخش نیست.' : 'هنوز چیزی ثبت نشده است.'}</p>`}</div>`;
     m.insertAdjacentHTML('beforeend', '<button type="button" class="fab" data-a="ledgerNew">+ ثبت دخل و خرج</button>');
     return;
   }
