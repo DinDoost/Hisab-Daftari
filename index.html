@@ -346,126 +346,51 @@ html,body{touch-action:pan-x pan-y;-ms-touch-action:pan-x pan-y}
 html,body{overscroll-behavior:none;overscroll-behavior-y:none}
 .sheet,#sheet,#app{overscroll-behavior:contain}
 
-/* فقط بخش لیست بالا و پایین برود؛ هدر و بالای صفحه ثابت بماند */
-body:has(#main > .list), body:has(#main > #nbRows){overflow:hidden}
-#main:has(> .list), #main:has(> #nbRows){height:100dvh;height:100vh;display:flex;flex-direction:column;overflow:hidden;padding-bottom:0}
-#main > .list, #main > #nbRows{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:120px}
-#main > .top, #main > .hero, #main > .info, #main > .lg-bar, #main > .pick-row, #main > .search{flex:0 0 auto}
+/* صفحه‌های مشتری، طرف حساب و دخل و خرج: بالای صفحه (هدر و خلاصه) ثابت می‌ماند و فقط فهرست تراکنش‌ها بالا و پایین می‌رود */
+body:has(#main > .list), body:has(#main > .lg-scroll), body:has(#main > #nbRows){overflow:hidden;height:100%}
+#main:has(> .list), #main:has(> .lg-scroll), #main:has(> #nbRows){
+  height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));
+  height:calc(100vh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));
+  display:flex;flex-direction:column;overflow:hidden;padding-bottom:0}
+#main > *:not(.list):not(.lg-scroll):not(#nbRows){flex:0 0 auto}
+#main > .list, #main > .lg-scroll, #main > #nbRows{flex:1 1 0;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y;padding-bottom:120px}
 
-/* بخش‌های ثابت بالا کوچک‌تر شوند تا فضای بیشتری برای لیست بماند */
-#main:has(> .list) > .top{padding:6px 4px 4px !important}
-#main:has(> .list) > .top h1{font-size:17px}
-#main:has(> .list) > .hero{padding:12px 14px !important;border-radius:20px !important}
-#main:has(> .list) > .hero .lbl{font-size:12px !important}
-#main:has(> .list) > .hero .net{font-size:22px !important;margin:4px 0 4px !important}
-#main:has(> .list) > .hero > div:nth-child(3){font-size:12px !important;margin-top:-4px !important;line-height:1.3 !important}
-#main:has(> .list) > .hero .mini{padding:7px 9px !important;border-radius:12px !important}
-#main:has(> .list) > .hero .mini span{font-size:11px !important}
-#main:has(> .list) > .hero .mini b{font-size:13px !important;margin-top:2px !important}
-#main:has(> .list) > .hero .mini-row{gap:8px !important}
-#main:has(> .list) > .info{margin-top:8px !important;padding:8px 12px !important;font-size:12px !important;line-height:1.5 !important;border-radius:14px !important}
-#main:has(> .list) > .info-h, #main:has(> .list) > .info h4{font-size:14px !important;margin:4px 0 2px !important}
+/* هدر فشرده‌تر، ولی هنوز خوانا */
+.top{padding:10px 4px 6px}
+.top h1,.top .title-btn{font-size:20px}
+.top .sp,.top .ic{width:42px;height:42px}
+.top .ic svg{width:24px;height:24px}
+.top .dots{font-size:26px}
 
-/* صفحه مشتریان: بالای صفحه فشرده‌تر تا جای بیشتری برای فهرست باشد */
-#main:has(> .list) > .top .ic, #main:has(> .list) > .top .sp{width:34px !important;height:34px !important}
-#main:has(> .list) > .top{padding:4px 4px 2px !important}
-#main:has(> .list) > .hero:not(:has(.mini-row)){padding:9px 14px !important}
-#main:has(> .list) > .hero:not(:has(.mini-row)) .lbl{font-size:11px !important}
-#main:has(> .list) > .hero:not(:has(.mini-row)) .net{font-size:20px !important;margin:2px 0 0 !important}
-#main:has(> .list) > .search{margin:6px 0 4px}
-#main:has(> .list) > .search input{padding:8px 12px !important}
-
-/* صفحه اصلی مشتریان: ردیف انتخاب طرف حساب در یک خط فشرده */
-#main:has(> .list) > .pick-row{flex-wrap:nowrap !important;overflow-x:auto;gap:6px !important;padding:2px 0 !important;margin:0 0 4px !important;-webkit-overflow-scrolling:touch}
-#main:has(> .list) > .pick-row .pchip{padding:5px 12px !important;font-size:13px !important;white-space:nowrap;flex:0 0 auto}
-#main:has(> .list) > .pick-row .lp-wrap{flex:0 0 auto}
-
-/* صفحه اصلی مشتریان: همه بخش‌های بالای فهرست فشرده و ثابت باشند، فقط فهرست مشتریان بالا برود */
-#main:has(> .list) > *:not(.list){flex:0 0 auto}
-#main:has(> .list) .hero{padding:12px 14px !important;border-radius:20px !important}
-#main:has(> .list) .hero .lbl{font-size:12px !important;margin:0 !important}
-#main:has(> .list) .hero .net{font-size:24px !important;margin:4px 0 6px !important}
-#main:has(> .list) .hero .mini-row{gap:8px !important}
-#main:has(> .list) .hero .mini{padding:7px 9px !important;border-radius:12px !important}
-#main:has(> .list) .hero .mini span{font-size:11px !important}
-#main:has(> .list) .hero .mini b{font-size:13px !important;margin-top:2px !important}
-#main:has(> .list) .opt-list{margin:8px 0 6px !important}
-#main:has(> .list) .opt{padding:10px 14px !important}
-#main:has(> .list) .sec-row{margin:4px 0 !important}
-#main:has(> .list) .live-btn{padding:6px 14px !important;font-size:13px !important}
-#main:has(> .list) .cq-wrap{margin:4px 0 6px !important}
-#main:has(> .list) .cq-wrap input{padding:8px 12px !important}
-
-/* فشرده‌تر: فضای بیشتر برای فهرست مشتریان */
-#main:has(> .list) > .top{padding:2px 4px 0 !important}
-#main:has(> .list) .top .ic,#main:has(> .list) .top .sp{width:30px !important;height:30px !important}
-#main:has(> .list) .top h1,#main:has(> .list) .top .title-btn{font-size:15px !important}
-#main:has(> .list) .hero{padding:8px 12px !important;border-radius:16px !important}
+/* بخش ثابت بالا فشرده‌تر */
+#main:has(> .list) > .hero, #main:has(> .lg-scroll) > .cb-hero, #main:has(> .list) .hero{padding:12px 14px !important;border-radius:18px !important}
+#main:has(> .list) .hero .net{font-size:22px !important;margin:4px 0 6px !important}
+#main:has(> .list) .hero .lbl{font-size:12px !important}
+#main:has(> .lg-scroll) .cb-hero{padding:12px 16px !important;border-radius:18px !important;margin:0 0 10px !important}
+#main:has(> .lg-scroll) .cb-net{font-size:26px !important;margin:4px 0 8px !important}
+#main:has(> .lg-scroll) .cb-card{padding:8px 12px !important}
+#main:has(> .lg-scroll) .cb-card b{font-size:14px !important}
+#main:has(> .list) .info{padding:8px 12px !important;font-size:13px !important;line-height:1.6 !important;margin-top:8px !important}
+#main:has(> .list) .sec-title{margin:10px 4px 0 !important;font-size:14px !important}
+#main:has(> .list) .search{margin-top:8px}
+#main:has(> .lg-scroll) .lg-bar{margin:8px 0 0 !important}
+#main:has(> .lg-scroll) .sec-row{margin:8px 4px 4px !important}
+/* صفحه طرف حساب‌ها: خلاصه‌ی بالا فشرده‌تر */
+#main:has(> .list) .hero{padding:10px 12px !important;border-radius:16px !important}
 #main:has(> .list) .hero .lbl{font-size:11px !important}
 #main:has(> .list) .hero .net{font-size:19px !important;margin:2px 0 4px !important}
-#main:has(> .list) .hero .mini{padding:5px 7px !important}
+#main:has(> .list) .hero .mini-row{gap:6px !important}
+#main:has(> .list) .hero .mini{padding:6px 8px !important;border-radius:12px !important}
 #main:has(> .list) .hero .mini span{font-size:10px !important}
-#main:has(> .list) .hero .mini b{font-size:12px !important;margin-top:1px !important}
-#main:has(> .list) .opt-list{margin:4px 0 4px !important}
-#main:has(> .list) .opt{padding:7px 12px !important;font-size:14px !important}
-#main:has(> .list) .sec-row{margin:2px 0 !important}
-#main:has(> .list) .sec-title{font-size:15px !important}
-#main:has(> .list) .live-btn{padding:4px 12px !important;font-size:12px !important}
-#main:has(> .list) .cq-wrap{margin:2px 0 4px !important}
-#main:has(> .list) .cq-wrap input{padding:6px 12px !important;font-size:14px !important}
-
-/* دخل و خرج: فقط تراکنش‌ها بالا بروند، بالای صفحه ثابت و فشرده بماند */
-body:has(#main > .lg-scroll){overflow:hidden}
-#main:has(> .lg-scroll){height:100dvh;height:100vh;display:flex;flex-direction:column;overflow:hidden;padding-bottom:0}
-#main > *:not(.lg-scroll){flex:0 0 auto}
-#main > .lg-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:120px}
-#main:has(> .lg-scroll) > .top{padding:2px 4px 0 !important}
-#main:has(> .lg-scroll) .top .ic{width:30px !important;height:30px !important}
-#main:has(> .lg-scroll) .top h1{font-size:15px !important}
-#main:has(> .lg-scroll) .cb-hero{padding:8px 12px !important;border-radius:16px !important}
-#main:has(> .lg-scroll) .cb-lbl{font-size:11px !important}
-#main:has(> .lg-scroll) .cb-net{font-size:20px !important;margin:2px 0 4px !important}
-#main:has(> .lg-scroll) .cb-cards{gap:6px !important;margin-top:4px !important}
-#main:has(> .lg-scroll) .cb-card{padding:5px 8px !important}
-#main:has(> .lg-scroll) .cb-card span{font-size:10px !important}
-#main:has(> .lg-scroll) .cb-card b{font-size:12px !important}
-#main:has(> .lg-scroll) .lg-bar{margin:6px 0 0 !important}
-#main:has(> .lg-scroll) .lg-bar input{padding:6px 12px !important;font-size:14px !important}
-#main:has(> .lg-scroll) .lg-fbtn{padding:6px 12px !important;font-size:13px !important}
-#main:has(> .lg-scroll) .sec-row{margin:4px 0 2px !important}
-#main:has(> .lg-scroll) .lg-filt button{padding:4px 12px !important;font-size:13px !important}
-
-/* دخل و خرج: بخش بالا فشرده‌تر تا تراکنش‌ها جای بیشتری داشته باشند */
-#main:has(> .lg-scroll) > .top .ic{width:28px !important;height:28px !important}
-#main:has(> .lg-scroll) > .top{padding:0 4px !important}
-#main:has(> .lg-scroll) .cb-hero{padding:6px 12px !important;border-radius:14px !important}
-#main:has(> .lg-scroll) .cb-lbl{font-size:10px !important;line-height:1.2 !important}
-#main:has(> .lg-scroll) .cb-net{font-size:17px !important;margin:0 0 3px !important;line-height:1.3 !important}
-#main:has(> .lg-scroll) .cb-cards{gap:6px !important}
-#main:has(> .lg-scroll) .cb-card{padding:3px 8px !important;border-radius:10px !important}
-#main:has(> .lg-scroll) .cb-card span{font-size:9px !important;line-height:1.2 !important}
-#main:has(> .lg-scroll) .cb-card b{font-size:11px !important;line-height:1.3 !important}
-#main:has(> .lg-scroll) .lg-bar{margin:4px 0 0 !important;gap:6px !important}
-#main:has(> .lg-scroll) .lg-bar input{padding:4px 10px !important;font-size:13px !important;border-radius:12px !important}
-#main:has(> .lg-scroll) .lg-fbtn{padding:4px 10px !important;font-size:12px !important}
-#main:has(> .lg-scroll) .sec-row{margin:2px 0 0 !important}
-#main:has(> .lg-scroll) .lg-filt button{padding:2px 10px !important;font-size:12px !important}
-#main:has(> .lg-scroll) > .lg-scroll{padding-top:4px !important}
-
-/* دخل و خرج: کمی بزرگ‌تر از حالت فشرده */
-#main:has(> .lg-scroll) > .top .ic{width:32px !important;height:32px !important}
-#main:has(> .lg-scroll) > .top h1{font-size:16px !important}
-#main:has(> .lg-scroll) .cb-hero{padding:9px 14px !important}
-#main:has(> .lg-scroll) .cb-lbl{font-size:12px !important}
-#main:has(> .lg-scroll) .cb-net{font-size:21px !important;margin:2px 0 6px !important}
-#main:has(> .lg-scroll) .cb-card{padding:5px 10px !important}
-#main:has(> .lg-scroll) .cb-card span{font-size:11px !important}
-#main:has(> .lg-scroll) .cb-card b{font-size:13px !important}
-#main:has(> .lg-scroll) .lg-bar{margin:8px 0 0 !important}
-#main:has(> .lg-scroll) .lg-bar input{padding:7px 12px !important;font-size:14px !important}
-#main:has(> .lg-scroll) .lg-fbtn{padding:7px 12px !important;font-size:13px !important}
-#main:has(> .lg-scroll) .sec-row{margin:6px 0 4px !important}
-#main:has(> .lg-scroll) .lg-filt button{padding:5px 14px !important;font-size:13px !important}
+#main:has(> .list) .hero .mini b{font-size:13px !important;margin-top:2px !important}
+/* صفحه طرف حساب‌ها: دکمه‌ها، عنوان مشتریان و جستجو فشرده‌تر تا فضای بیشتری برای فهرست مشتریان بماند */
+#main:has(> .list) > .opt-list{margin:6px 0 !important;gap:6px !important}
+#main:has(> .list) .opt{padding:8px 12px !important;font-size:13px !important;border-radius:12px !important}
+#main:has(> .list) > .sec-row{margin:6px 4px 4px !important}
+#main:has(> .list) .sec-title{font-size:14px !important;margin:0 !important}
+#main:has(> .list) .live-btn{padding:5px 12px !important;font-size:12px !important}
+#main:has(> .list) > .cq-wrap{margin:2px 0 6px !important}
+#main:has(> .list) .cq-wrap input{padding:7px 12px !important;font-size:13px !important;border-radius:12px !important}
 </style>
 </head>
 <body>
