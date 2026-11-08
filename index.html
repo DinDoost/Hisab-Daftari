@@ -340,6 +340,7 @@ html,body{touch-action:pan-x pan-y;-ms-touch-action:pan-x pan-y}
 .nb-row b{color:#1e78d2;line-height:1.4;font-size:17px}
 .nb-row span,.nb-row p{line-height:1.5;margin:0;color:#1d2b5a}
 .nb-row small{line-height:1.5;margin:0}
+#f-nb:focus,#f-ns:focus{outline:none;box-shadow:none;border-color:var(--line)}
 </style>
 </head>
 <body>
@@ -858,7 +859,7 @@ function nbOnline(){
   if(!navigator.onLine){ showToast('برای ثبت، اول به انترنت وصل شوید.'); return false; }
   return true;
 }
-function nbShort(t){ t = t || ''; return t.length > 80 ? t.slice(0, 80) + '…' : t; }
+function nbShort(t){ t = (t || '').split('\n')[0]; return t.length > 80 ? t.slice(0, 80) + '…' : t; }
 function nbRowsHTML(b){
   const q = NBQ.trim().toLowerCase();
   const all = NY.filter(x => x.nb === b.id);
@@ -878,19 +879,23 @@ function nbRowsHTML(b){
       <button class="lg-more" data-a="nbNoteMenu" data-id="${esc(x.id)}" aria-label="گزینه‌ها">⋮</button>
     </div>`; }).join('');
 }
+function nbCard(b, on, action, radio){
+  const ring = on ? '#1e9e5a' : '#8a97ab';
+  return `<div style="display:flex;align-items:center;gap:10px;min-height:60px;box-sizing:border-box;border:1px solid ${on ? '#9fc4a9' : 'var(--line)'};background:${on ? '#e6eef9' : 'var(--card)'};border-radius:16px;padding:12px 14px;margin-bottom:10px">
+    <button data-a="${action}" data-p="${esc(b.id)}" style="flex:1;display:flex;align-items:center;gap:12px;border:0;background:transparent;padding:0;cursor:pointer;color:var(--text);font-size:16px;font-weight:600;text-align:right">
+      ${radio ? `<span style="width:22px;height:22px;border-radius:50%;border:2px solid ${ring};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${on ? '<span style="width:12px;height:12px;border-radius:50%;background:#1e9e5a"></span>' : ''}</span>` : ''}
+      <span>${esc(b.n)}</span>
+    </button>
+    <button data-a="nbMenu" data-p="${esc(b.id)}" aria-label="گزینه‌ها" style="border:0;background:transparent;font-size:28px;line-height:1;padding:0 6px;cursor:pointer;color:var(--deep)">⋮</button>
+  </div>`;
+}
 function renderNotebooks(m){
   nbPersist();
   if(!NBSYNCED && !NBLOADING && cloudUser && navigator.onLine) nbLoad();
   if(V.view === 'nbList'){
     m.innerHTML = pageHead('دفترچه‌ها', 'menu') + `
       <div style="margin-top:8px">
-        ${NB.map(b => `<div class="lg-row">
-            <div class="lg-main" data-a="nbOpen" data-p="${esc(b.id)}" style="cursor:pointer">
-              <b>${esc(b.n)}</b>
-              <small>${NY.filter(x => x.nb === b.id).length} یادداشت</small>
-            </div>
-            <button class="lg-more" data-a="nbMenu" data-p="${esc(b.id)}" aria-label="گزینه‌ها">⋮</button>
-          </div>`).join('')}
+        ${NB.map(b => nbCard(b, false, 'nbOpen', false)).join('')}
       </div>
       ${NB.length ? '' : '<div class="empty">هنوز دفترچه‌ای ساخته نشده است.</div>'}
       <button class="fab" data-a="nbAdd">${ICON.plus}<span>افزودن دفترچه</span></button>`;
@@ -904,9 +909,11 @@ function renderNotebooks(m){
       <button class="title-btn" data-a="nbPickToggle">${esc(b.n)} <span class="caret">${NBPICK ? '▴' : '▾'}</span></button>
       <span class="sp"></span>
     </header>
-    ${NBPICK ? `<div class="pick-row">
-      ${NB.map(x => `<button class="pchip ${x.id === b.id ? 'on' : ''}" data-a="nbSwitch" data-p="${esc(x.id)}"><span class="rd"></span><span>${esc(x.n)}</span></button>`).join('')}
-      <button class="pchip add" data-a="nbAdd">${ICON.plus}<span>افزودن دفترچه</span></button>
+    ${NBPICK ? `<div style="margin:4px 0 12px">
+      ${NB.map(x => nbCard(x, x.id === b.id, 'nbSwitch', true)).join('')}
+      <button data-a="nbAdd" style="width:100%;display:flex;align-items:center;justify-content:space-between;box-sizing:border-box;min-height:60px;border:1px dashed #9aa9c2;background:var(--card);border-radius:16px;padding:12px 14px;cursor:pointer;color:var(--deep);font-size:16px;font-weight:600">
+        <span>افزودن دفترچه</span><span style="font-size:24px;line-height:1">+</span>
+      </button>
     </div>` : ''}
     ${NBPICK ? '' : `    <div class="lg-bar">
       <input id="nbq" type="search" placeholder="جستجو در موضوع یا متن..." value="${esc(NBQ)}">
@@ -1765,7 +1772,7 @@ function pinSection(){
 }
 
 /* ---------- lock screen (PIN) ---------- */
-let LK = { locked:true, mode:S.email ? 'login' : 'signup', fromSettings:false, f:{mail:S.email||'',pass:'',pass2:''}, vCode:'', purpose:'', pend:null, buf:'', err:'', newPin:'', showPad:false, recCode:'' };
+let LK = { locked: !(S.loggedIn && S.email && !S.pin), mode: (S.loggedIn && S.email && S.pin) ? 'unlock' : (S.email ? 'login' : 'signup'), fromSettings:false, f:{mail:S.email||'',pass:'',pass2:''}, vCode:'', purpose:'', pend:null, buf:'', err:'', newPin:'', showPad:false, recCode:'' };
 const REC_KEY = 'hisab_rec_pending';
 function recSave(mail){ try{ localStorage.setItem(REC_KEY, JSON.stringify({mail, t:Date.now()})); }catch(e){} }
 function recClear(){ try{ localStorage.removeItem(REC_KEY); }catch(e){} }
@@ -3490,7 +3497,7 @@ document.addEventListener('click', async e => {
       <label for="f-ns">موضوع</label>
       <input id="f-ns" maxlength="120">
       <label for="f-nb">یادداشت</label>
-      <textarea id="f-nb" rows="5"></textarea>
+      <textarea id="f-nb" rows="5" style="height:130px;box-sizing:border-box;line-height:1.8;font-size:15px;overflow-y:auto;resize:none;white-space:pre-wrap"></textarea>
       <label>تاریخ (اختیاری، اگر خالی بماند تاریخ امروز ثبت می‌شود)</label>
       <button type="button" class="dbtn" data-a="calOpen"><span id="dtxt">${todayStr()}</span><span class="cal-ic">${ICON.cal}</span></button>
       <input type="hidden" id="f-date" value="${todayStr()}">
@@ -3542,7 +3549,7 @@ document.addEventListener('click', async e => {
         <label for="f-ns">موضوع</label>
         <input id="f-ns" maxlength="120" value="${esc(x.s)}">
         <label for="f-nb">یادداشت</label>
-        <textarea id="f-nb" rows="5">${esc(x.b)}</textarea>
+        <textarea id="f-nb" rows="5" style="height:130px;box-sizing:border-box;line-height:1.8;font-size:15px;overflow-y:auto;resize:none;white-space:pre-wrap">${esc(x.b)}</textarea>
         <label>تاریخ</label>
         <button type="button" class="dbtn" data-a="calOpen"><span id="dtxt">${esc(x.dt)}</span><span class="cal-ic">${ICON.cal}</span></button>
         <input type="hidden" id="f-date" value="${esc(x.dt)}">
@@ -3957,7 +3964,7 @@ async function initCloudSession(){
   const { data, error } = await supabaseClient.auth.getSession();
   let sessUser = data?.session?.user || null;
   /* اگر قبلاً وارد شده‌اید و PIN دارید، نشست ذخیره‌شده روی گوشی کافی است (حتی بدون اینترنت) */
-  if(!sessUser && S.loggedIn && S.pin && S.email) sessUser = storedSessionUser();
+  if(!sessUser && S.loggedIn && S.email) sessUser = storedSessionUser();
   if(error && !sessUser){ LK.locked = true; LK.err = 'خواندن نشست کاربری ناموفق بود.'; renderLock(); return; }
   if(!sessUser){
     cloudUser = null; cloudReady = false; LK.locked = true;
