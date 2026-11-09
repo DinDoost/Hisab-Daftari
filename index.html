@@ -42,6 +42,8 @@ input:focus,select:focus{outline:2px solid #9fb9de;border-color:transparent}
 .tx-card{padding-left:60px}
 .tx-nm b{font-size:13px;line-height:1.55;font-weight:600;white-space:normal;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;line-clamp:4;word-break:break-word}
 .nm small{color:var(--muted);font-size:12px;margin-top:3px}
+.tx-nm b[data-a]{cursor:pointer}
+.tx-nm b.open{display:block;-webkit-line-clamp:unset;line-clamp:unset;overflow:visible;white-space:pre-wrap;overflow-wrap:anywhere}
 .bal{font-size:14px;font-weight:600;direction:ltr;white-space:nowrap;text-align:left}
 .pos{color:var(--pos)}.neg{color:var(--neg)}.zero{color:var(--muted)}
 .bpos{color:#0d6b33;font-weight:700}
@@ -72,6 +74,8 @@ input:focus,select:focus{outline:2px solid #9fb9de;border-color:transparent}
 .lg-main b{font-size:15px;font-weight:600}
 .lg-main span{font-size:14px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lg-main small{font-size:12px;color:var(--muted)}
+.lg-main span[data-a="lgDescToggle"]{cursor:pointer}
+.lg-main span.open{white-space:pre-wrap;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;line-height:1.7}
 .lg-del{border:0;background:#fdecea;color:#c0392b;width:34px;height:34px;border-radius:50%;font-size:20px;line-height:1;cursor:pointer;flex:none}
 .lg-more{border:0;background:var(--soft);color:var(--deep);width:36px;height:36px;border-radius:50%;font-size:18px;font-weight:700;line-height:1;cursor:pointer;flex:none}
 .lg-acts{display:flex;gap:8px;margin:-2px 0 10px}
@@ -803,6 +807,8 @@ try{
 }catch(e){}
 let SUI = { curOpen:false };
 let CAL = { open:false, mode:'days', sel:{y:0,m:1,d:1}, vy:0, vm:1 };
+let TXEXP = new Set();   /* expanded transaction descriptions (customer page) */
+let LGEXP = new Set();   /* expanded descriptions (income/expense list) */
 let LPSEL = null;     /* long-press selection: {key, view, kind, pid, cid, tid} */
 let LPJUST = false;
 let TXEXIT = 0;       /* time of the last tap that closed the ⋮ mode (a second tap right after is ignored) */   /* swallow the click that follows a long press */
@@ -1193,7 +1199,7 @@ function render(){
         <div class="lg-row">
           <div class="lg-main">
             <b class="${x.type === 'in' ? 'cb-in' : 'cb-out'}">${x.type === 'in' ? 'دخل' : 'خرج'} ${money(x.a)}</b>
-            <span>${esc(x.d || 'بدون شرح')}</span>
+            <span${LGEXP.has(String(x.id)) ? ' class="open"' : ''} data-a="lgDescToggle" data-id="${esc(String(x.id))}">${esc(x.d || 'بدون شرح')}</span>
             <small>${jStr(x.y, x.m, x.dd)}${x.hh != null ? ' · ' + clockText(x.hh, x.mm || 0) : ''}</small>
           </div>
           <button class="lg-more" data-a="ledgerMore" data-id="${esc(x.id)}" aria-label="گزینه‌ها">⋮</button>
@@ -1336,7 +1342,7 @@ function render(){
           const on = LPSEL && LPSEL.key === key;
           return `<div class="lp-wrap">
           <div class="card tx-card" style="cursor:default">
-            <span class="nm tx-nm"><b>${esc(t.d || 'بدون شرح')}</b><small>${jStr(t.y, t.m, t.dd)}${t.hh != null ? ' · ' + clockText(t.hh, t.mm || 0) : ''}</small></span>
+            <span class="nm tx-nm"><b${TXEXP.has(String(t.id)) ? ' class="open"' : ''} data-a="txDescToggle" data-id="${esc(String(t.id))}">${esc(t.d || 'بدون شرح')}</b><small>${jStr(t.y, t.m, t.dd)}${t.hh != null ? ' · ' + clockText(t.hh, t.mm || 0) : ''}</small></span>
             <span class="bal ${cls(t.a)}">${money(t.a)}</span>
           </div>
           ${on ? '' : `<button class="pmore" data-a="txMore" data-p="${p.id}" data-c="${c.id}" data-t="${t.id}" aria-label="گزینه‌ها">⋮</button>`}
@@ -1702,6 +1708,25 @@ function fitText(x, text, cx, y, max, size, font, bold){
   let sz = size;
   do{ x.font = `${bold ? 'bold ' : ''}${sz}px ${font}`; sz--; }while(x.measureText(text).width > max && sz > 8);
   x.fillText(text, cx, y);
+}
+function wrapCanvasLines(mx, text, maxW){
+  const out = [];
+  String(text).split(/\r?\n/).forEach(para => {
+    let line = '';
+    para.split(/\s+/).filter(Boolean).forEach(w0 => {
+      let w = w0;
+      while(mx.measureText(w).width > maxW){
+        let k = w.length;
+        while(k > 1 && mx.measureText(w.slice(0, k)).width > maxW) k--;
+        if(line){ out.push(line); line = ''; }
+        out.push(w.slice(0, k)); w = w.slice(k);
+      }
+      const t = line ? line + ' ' + w : w;
+      if(line && mx.measureText(t).width > maxW){ out.push(line); line = w; } else line = t;
+    });
+    out.push(line);
+  });
+  return out.length ? out : [''];
 }
 async function shareImg3(c, onReady){
   const d = invData(c);
@@ -2503,7 +2528,7 @@ const SHEETS = {
       <label for="f-amount">مبلغ (${curLabel()})</label>
       <input id="f-amount" class="money" inputmode="numeric" placeholder="0" value="${amt ? amt.toLocaleString('en-US') : ''}">
       <label for="f-desc">شرح</label>
-      <input id="f-desc" maxlength="120" value="${esc(t ? t.d : '')}">
+      <textarea id="f-desc" rows="3" style="resize:none;line-height:1.7;overflow-y:auto">${esc(t ? t.d : '')}</textarea>
       <label>تاریخ و ساعت</label>
       <div class="dt-row">
         <button type="button" class="dbtn" data-a="calOpen"><span id="dtxt">${date}</span><span class="cal-ic">${ICON.cal}</span></button>
@@ -2785,8 +2810,14 @@ async function lgImg(rows, onReady){
   const s = lgSums(rows);
   const font = 'Vazirmatn, Tahoma, sans-serif';
   try{ await document.fonts.load('bold 22px Vazirmatn'); await document.fonts.load('14px Vazirmatn'); }catch(e){}
-  const W = 800, RH = 42, HH = 40, yH = 160;
-  const H = yH + HH + Math.max(1, rows.length) * RH + 80;
+  const W = 800, RH = 42, HH = 40, yH = 160, LH = 22;
+  /* wrap the description so the whole text shows (rows grow taller) */
+  const mx = document.createElement('canvas').getContext('2d');
+  mx.font = `14px ${font}`;
+  const rowLines = rows.map(r => wrapCanvasLines(mx, r.d || 'بدون شرح', 240));
+  const rowHs = rowLines.map(l => Math.max(RH, l.length * LH + 16));
+  const bodyH = rows.length ? rowHs.reduce((a, b) => a + b, 0) : RH;
+  const H = yH + HH + bodyH + 80;
   const Q = 4;
   const cv = document.createElement('canvas');
   cv.width = W * Q; cv.height = H * Q;
@@ -2829,24 +2860,30 @@ async function lgImg(rows, onReady){
     x.fillStyle = '#555'; x.font = `14px ${font}`; x.textAlign = 'center';
     x.fillText('تراکنشی ثبت نشده', W / 2, yH + HH + RH / 2);
   }
+  let yy = yH + HH;
   rows.forEach((r, i) => {
-    const y = yH + HH + i * RH;
+    const rh = rowHs[i], y = yy, cy = y + rh / 2;
     x.fillStyle = '#1f2937';
-    x.strokeRect(40, y, W - 80, RH);
+    x.strokeRect(40, y, W - 80, rh);
     x.textAlign = 'center';
     x.font = `14px ${font}`;
-    x.fillText(String(i + 1), cells[4].cx, y + RH / 2);
-    x.fillText(fit(`${Math.abs(r.a).toLocaleString('en-US')} ${curLabel()}`, cells[3].w, 14), cells[3].cx, y + RH / 2);
+    x.fillText(String(i + 1), cells[4].cx, cy);
+    x.fillText(fit(`${Math.abs(r.a).toLocaleString('en-US')} ${curLabel()}`, cells[3].w, 14), cells[3].cx, cy);
     x.fillStyle = r.type === 'in' ? '#1e7a4c' : '#c0392b';
-    x.fillText(r.type === 'in' ? 'دخل' : 'خرج', cells[2].cx, y + RH / 2);
+    x.fillText(r.type === 'in' ? 'دخل' : 'خرج', cells[2].cx, cy);
     x.fillStyle = '#1f2937';
     x.font = `13px ${font}`;
-    x.fillText(fit(lgWhen(r), cells[1].w, 13), cells[1].cx, y + RH / 2);
-    x.fillText(fit(r.d || 'بدون شرح', cells[0].w, 14), cells[0].cx, y + RH / 2);
+    x.fillText(fit(lgWhen(r), cells[1].w, 13), cells[1].cx, cy);
+    x.font = `14px ${font}`;
+    x.textAlign = 'right';
+    const ls = rowLines[i], top0 = cy - (ls.length - 1) * LH / 2;
+    ls.forEach((ln, k) => x.fillText(ln, cells[0].cx + cells[0].w / 2 - 10, top0 + k * LH));
+    x.textAlign = 'center';
+    yy += rh;
   });
 
   const t = today();
-  const fy = yH + HH + Math.max(1, rows.length) * RH + 36;
+  const fy = yH + HH + bodyH + 36;
   x.textAlign = 'right'; x.fillStyle = '#555'; x.font = `12px ${font}`;
   x.fillText(`تاریخ تولید گزارش: ${latinDate(t.y, t.m, t.d)}`, W - 40, fy);
   x.fillText('ساخته شده با حساب دفتری', W - 40, fy + 20);
@@ -2883,7 +2920,7 @@ function ledgerFormHTML(){
       <label for="f-amount">مبلغ (${curLabel()})</label>
       <input id="f-amount" class="money" inputmode="numeric" placeholder="0" value="${amtShow}">
       <label for="f-desc">شرح</label>
-      <input id="f-desc" maxlength="120" value="${esc(LG.desc)}">
+      <textarea id="f-desc" rows="3" style="resize:none;line-height:1.7;overflow-y:auto">${esc(LG.desc)}</textarea>
       <label>تاریخ و ساعت</label>
       <div class="dt-row">
         <button type="button" class="dbtn" data-a="calOpen"><span id="dtxt">${esc(LG.date)}</span><span class="cal-ic">${ICON.cal}</span></button>
@@ -3186,7 +3223,7 @@ function renderPortal(){
     const status = bal > 0 ? 'بدهکار است' : bal < 0 ? 'طلب دارد' : 'تسویه';
     const rows = txs.length
       ? txs.map(t => `
-        <div class="card tx-card" style="cursor:default"><span class="nm tx-nm"><b>${esc(t.d || 'بدون شرح')}</b><small>${jStr(t.y, t.m, t.dd)}${t.hh != null ? ' · ' + clockText(Number(t.hh), Number(t.mm) || 0) : ''}</small></span><span class="bal ${balCls(Number(t.a) || 0)}">${money(Number(t.a) || 0)}</span></div>`).join('')
+        <div class="card tx-card" style="cursor:default"><span class="nm tx-nm"><b${TXEXP.has('pt' + (t.id || t.ts)) ? ' class="open"' : ''} data-a="txDescToggle" data-id="${esc('pt' + (t.id || t.ts))}">${esc(t.d || 'بدون شرح')}</b><small>${jStr(t.y, t.m, t.dd)}${t.hh != null ? ' · ' + clockText(Number(t.hh), Number(t.mm) || 0) : ''}</small></span><span class="bal ${balCls(Number(t.a) || 0)}">${money(Number(t.a) || 0)}</span></div>`).join('')
       : `<div class="empty">هنوز تراکنشی ثبت نشده.</div>`;
     el.innerHTML = `
       <div class="pt-wrap pt-stmt">
@@ -3719,6 +3756,20 @@ document.addEventListener('click', async e => {
       NY.push({ id: row.id, nb: bid, r, s, b: bt, dt, ts: row.ts });
       closeSheet(); render();
       playBell(); showToast('یادداشت ثبت شد', true);
+      break;
+    }
+    case 'txDescToggle': {
+      const id = el.dataset.id;
+      const open = !TXEXP.has(id);
+      if(open) TXEXP.add(id); else TXEXP.delete(id);
+      el.classList.toggle('open', open);
+      break;
+    }
+    case 'lgDescToggle': {
+      const id = el.dataset.id;
+      const open = !LGEXP.has(id);
+      if(open) LGEXP.add(id); else LGEXP.delete(id);
+      if(el.isConnected) el.classList.toggle('open', open); else render();
       break;
     }
     case 'nbNoteToggle': {
