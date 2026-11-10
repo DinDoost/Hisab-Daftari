@@ -465,6 +465,19 @@ body:has(#main > .list), body:has(#main > .lg-scroll), body:has(#main > #nbRows)
 #main:has(> .list) .cust-wrap .card .bal{font-size:12px !important}
 #main:has(> .list) .cust-wrap .card .bal-note{font-size:10px !important}
 #main:has(> .list) .cust-wrap .card{gap:8px}
+
+/* قالب «دخل و خرج شخصی»: بدون خط اطراف، رنگ یکدست با برنامه، متن درشت‌تر و فلش بزرگ‌تر */
+#main .opt.ledger-open{border:0 !important;outline:none !important;background:var(--soft) !important;color:var(--deep) !important;font-size:17px !important;font-weight:700 !important;padding:16px 18px !important;border-radius:16px !important;box-shadow:none}
+#main .opt.ledger-open:focus,#main .opt.ledger-open:focus-visible{outline:none !important}
+#main .opt.ledger-open .sub svg{width:26px !important;height:26px !important;stroke:var(--pri) !important;stroke-width:2.6 !important}
+/* فشرده‌سازی قالب دخل و خرج شخصی، و نزدیک‌تر کردن قالب جستجو و «مشتریان» تا جای بیشتری برای ردیف مشتریان بماند */
+#main .opt.ledger-open{padding:11px 14px !important;font-size:16px !important;border-radius:14px !important}
+#main .opt.ledger-open .sub svg{width:22px !important;height:22px !important}
+#main:has(> .list) > .opt-list{margin:2px 0 0 !important}
+#main:has(> .list) .cq-wrap{margin:0 0 4px !important;gap:8px !important}
+#main:has(> .list) .cq-lbl{width:92px;min-height:46px;height:46px;font-size:14px !important}
+#main:has(> .list) .cq-wrap input{height:46px;min-height:46px !important;padding:0 12px !important;font-size:14px !important;border-radius:14px !important}
+#main:has(> .list) > .list{margin-top:0 !important;padding-top:0 !important}
 </style>
 </head>
 <body>
@@ -1900,7 +1913,7 @@ function partySection(p){
       </section>
       ${on ? `<div class="lp-acts hero-acts"><button class="lp-btn" data-a="lpEdit" data-k="party" data-p="${p.id}" aria-label="ویرایش">${ICON.edit}</button></div>` : ''}
     </div>
-    <div class="opt-list" style="margin:14px 0 8px"><button class="opt" data-a="ledgerOpen"><span>دخل و خرج شخصی</span><span class="sub">${ICON.chev}</span></button></div>
+    <div class="opt-list" style="margin:14px 0 8px"><button class="opt ledger-open" data-a="ledgerOpen"><span>دخل و خرج شخصی</span><span class="sub">${ICON.chev}</span></button></div>
     
     <div class="cq-wrap"><span class="cq-lbl">مشتریان</span><input id="cq" type="search" placeholder="جستجوی نام یا شماره تلفن..." value="${esc(V.q)}"></div>
     <div class="list">
