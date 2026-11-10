@@ -1734,19 +1734,28 @@ function invHTML3(c){
   <div class="foot">تاریخ تولید گزارش<br><b>${latinDate(t.y, t.m, t.d)}</b><br>ساخته شده با حساب دفتری</div>
   </body></html>`;
 }
-function sharePdf3(c, onReady){
-  const f = document.createElement('iframe');
-  f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
-  document.body.appendChild(f);
-  const d = f.contentWindow.document;
-  d.open(); d.write(invHTML3(c)); d.close();
-  setTimeout(() => {
-    if(onReady) onReady();
-    try{ f.contentWindow.focus(); f.contentWindow.print(); }
-    catch(e){ alert('ذخیره PDF در این مرورگر پشتیبانی نمی‌شود.'); }
-    setTimeout(() => f.remove(), 1500);
-  }, 300);
+/* PDF مستقیم ساخته می‌شود (بدون پنجرهٔ چاپ): همان گزارش تصویری داخل یک فایل PDF */
+function jpegToPdf(jpgBytes, pw, ph, iw, ih){
+  const enc = new TextEncoder(); const chunks = []; let len = 0; const offs = [];
+  const push = u => { chunks.push(u); len += u.length; };
+  const str = s => push(enc.encode(s));
+  const obj = (n, body) => { offs[n] = len; str(`${n} 0 obj\n${body}\nendobj\n`); };
+  str('%PDF-1.4\n');
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw} ${ph}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`);
+  offs[4] = len;
+  str(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${iw} /Height ${ih} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpgBytes.length} >>\nstream\n`);
+  push(jpgBytes); str('\nendstream\nendobj\n');
+  const content = `q ${pw} 0 0 ${ph} 0 0 cm /Im0 Do Q`;
+  obj(5, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+  const xref = len;
+  str('xref\n0 6\n0000000000 65535 f \n');
+  for(let i = 1; i <= 5; i++) str(`${String(offs[i]).padStart(10, '0')} 00000 n \n`);
+  str(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
+  return new Blob(chunks, { type: 'application/pdf' });
 }
+function sharePdf3(c, onReady){ return shareImg3(c, onReady, true); }
 function fitText(x, text, cx, y, max, size, font, bold){
   let sz = size;
   do{ x.font = `${bold ? 'bold ' : ''}${sz}px ${font}`; sz--; }while(x.measureText(text).width > max && sz > 8);
@@ -1771,7 +1780,7 @@ function wrapCanvasLines(mx, text, maxW){
   });
   return out.length ? out : [''];
 }
-async function shareImg3(c, onReady){
+async function shareImg3(c, onReady, asPdf){
   const d = invData(c);
   const font = 'Vazirmatn, Tahoma, sans-serif';
   try{ await document.fonts.load('bold 16px Vazirmatn'); await document.fonts.load('bold 14px Vazirmatn'); await document.fonts.load('600 14px Vazirmatn'); }catch(e){}
@@ -1803,7 +1812,7 @@ async function shareImg3(c, onReady){
   const tBottom = tTop + hdrH + rowHs.reduce((a, b) => a + b, 0);
   const H = tBottom + 130;
   const cv = document.createElement('canvas');
-  const Q = 4; cv.width = W * Q; cv.height = H * Q;
+  const Q = 2; cv.width = W * Q; cv.height = H * Q;
   const x = cv.getContext('2d');
   x.scale(Q, Q); x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
   const unit = curLabel();
@@ -1889,18 +1898,27 @@ async function shareImg3(c, onReady){
   x.fillStyle = '#374151'; x.font = `bold 14px ${font}`;
   x.fillText('ساخته شده با حساب دفتری', W - 40, tBottom + 78);
 
-  cv.toBlob(async blob => {
+  cv.toBlob(async jpg => {
     if(onReady) onReady();
-    const file = new File([blob], `${c.n}.png`, { type: 'image/png' });
+    let file, fallbackUrl;
+    if(asPdf){
+      const bytes = new Uint8Array(await jpg.arrayBuffer());
+      const pdf = jpegToPdf(bytes, W, H, cv.width, cv.height);
+      file = new File([pdf], `${c.n}.pdf`, { type: 'application/pdf' });
+      fallbackUrl = pdf;
+    } else {
+      file = new File([jpg], `${c.n}.jpg`, { type: 'image/jpeg' });
+      fallbackUrl = jpg;
+    }
     if(navigator.canShare && navigator.canShare({ files: [file] })){
       try{ await navigator.share({ files: [file], title: c.n }); return; }catch(e){ return; }
     }
-    const url = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(fallbackUrl);
     const a = document.createElement('a');
-    a.href = url; a.download = `${c.n}.png`;
+    a.href = url; a.download = file.name;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
-  }, 'image/png');
+  }, 'image/jpeg', 0.9);
 }
 
 /* ---------- main page: one selected party at a time ---------- */
