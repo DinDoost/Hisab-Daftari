@@ -505,6 +505,7 @@ let ledgerCloudOk = true, ledgerWarned = false, ledgerStrict = false, lastLedger
 
 async function cloudLoad(){
   if(!supabaseClient || !cloudUser) throw new Error('اتصال حساب ابری برقرار نیست.');
+  nbUseUser();
   const u = cloudUser.id;
   const [pr, cr, tr, lr] = await Promise.all([
     supabaseClient.from('p').select('id,n,cur').eq('u',u),
@@ -975,18 +976,33 @@ function lpWrap(key, card, acts){
 let NB = [], NY = [], NBLOADED = false, NBLOADING = false, NBTRIED = false;
 let NBFROM = '', NBTO = '', NBQ = '', NBPICK = false, NBCUR = null;
 /* دفترچه‌ی باز را در گوشی نگه می‌داریم تا بعد از بیرون رفتن یا بارگذاری دوباره، همان دفترچه باز بماند */
-try{ const _nb = JSON.parse(localStorage.getItem('hesab-nb-cur') || 'null'); if(_nb && _nb.id){ NBCUR = _nb.id; } }catch(e){}
 let NBEXP = new Set();
 if(window.__rs){ NBCUR = window.__rs.NBCUR || null; NBPICK = !!window.__rs.NBPICK; window.__rs = null; }
-let NBSYNCED = false;
+let NBSYNCED = false, NBOWNER = null;
 function nbPersist(){
-  try{ localStorage.setItem('hesab-nb-v1', JSON.stringify({ nb: NB, ny: NY })); }catch(e){}
+  if(!cloudUser) return;
+  try{ localStorage.setItem('hesab-nb-v1', JSON.stringify({ uid: cloudUser.id, nb: NB, ny: NY })); }catch(e){}
 }
-/* نسخهٔ ذخیره‌شده در گوشی: اگر اینترنت نباشد هم دفترچه‌ها و یادداشت‌ها نشان داده می‌شوند */
-try{
-  const c = JSON.parse(localStorage.getItem('hesab-nb-v1') || 'null');
-  if(c){ NB = Array.isArray(c.nb) ? c.nb : []; NY = Array.isArray(c.ny) ? c.ny : []; }
-}catch(e){}
+/* نسخهٔ ذخیره‌شده فقط مربوط به همان حسابی است که آن را نوشته؛ حساب دیگر دفترچه‌های این حساب را نمی‌بیند */
+function nbUseUser(){
+  const uid = cloudUser ? cloudUser.id : null;
+  if(NBOWNER === uid) return;
+  NBOWNER = uid; NB = []; NY = []; NBSYNCED = false; NBCUR = null;
+  if(!uid) return;
+  try{
+    const c = JSON.parse(localStorage.getItem('hesab-nb-v1') || 'null');
+    if(c && c.uid === uid){ NB = Array.isArray(c.nb) ? c.nb : []; NY = Array.isArray(c.ny) ? c.ny : []; }
+    else localStorage.removeItem('hesab-nb-v1');
+  }catch(e){}
+  try{
+    const _nb = JSON.parse(localStorage.getItem('hesab-nb-cur') || 'null');
+    if(_nb && _nb.id && NB.some(x => x.id === _nb.id)) NBCUR = _nb.id;
+  }catch(e){}
+}
+function nbReset(){
+  NBOWNER = null; NB = []; NY = []; NBSYNCED = false; NBCUR = null; NBPICK = false;
+  try{ localStorage.removeItem('hesab-nb-v1'); localStorage.removeItem('hesab-nb-cur'); }catch(e){}
+}
 async function nbLoad(){
   if(!supabaseClient || !cloudUser || NBLOADING || !navigator.onLine) return;
   NBLOADING = true; NBSYNCED = true;
@@ -2336,6 +2352,7 @@ async function authLogout(){
   if(!confirm('از حساب خارج می‌شوید؟')) return;
   if(supabaseClient) await supabaseClient.auth.signOut();
   cloudReady = false; cloudUser = null; clearTimeout(cloudSyncTimer);
+  nbReset();
   S = { cur:'toman', parties:[], email:'', loggedIn:false };
   try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){}
   LK.locked = true; LK.mode = 'login'; LK.err = ''; LK.buf = '';
@@ -4210,6 +4227,7 @@ async function refreshCloudQuiet(){
   if(!cloudUser || cloudReady) return;
   try{
     await cloudLoad();
+    await nbLoad();
     cloudReady = true; S.loggedIn = true;
     render();
     startLive();
@@ -4291,6 +4309,7 @@ async function initCloudSession(){
     renderLock(); return;
   }
   cloudUser = sessUser; cloudReady = false;
+  nbUseUser();
   S.loggedIn = true; delete S.passHash; delete S.reg;
   LK.f.mail = S.email || cloudUser.email || '';
   let stillUnlocked = false;
