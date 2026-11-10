@@ -1756,6 +1756,15 @@ function jpegToPdf(jpgBytes, pw, ph, iw, ih){
   return new Blob(chunks, { type: 'application/pdf' });
 }
 function sharePdf3(c, onReady){ return shareImg3(c, onReady, true); }
+/* فایل PDF و عکس از قبل آماده می‌شود تا با یک لمس مستقیم به برنامه‌های اشتراک برود */
+const SHAREPRE = {};
+function prewarmShare(c){
+  if(!c) return;
+  ['pdf','img'].forEach(k => {
+    delete SHAREPRE[`${k}:${c.id}`];
+    shareImg3(c, null, k === 'pdf', f => { SHAREPRE[`${k}:${c.id}`] = f; }).catch(() => {});
+  });
+}
 function fitText(x, text, cx, y, max, size, font, bold){
   let sz = size;
   do{ x.font = `${bold ? 'bold ' : ''}${sz}px ${font}`; sz--; }while(x.measureText(text).width > max && sz > 8);
@@ -1780,7 +1789,7 @@ function wrapCanvasLines(mx, text, maxW){
   });
   return out.length ? out : [''];
 }
-async function shareImg3(c, onReady, asPdf){
+async function shareImg3(c, onReady, asPdf, build){
   const d = invData(c);
   const font = 'Vazirmatn, Tahoma, sans-serif';
   try{ await document.fonts.load('bold 16px Vazirmatn'); await document.fonts.load('bold 14px Vazirmatn'); await document.fonts.load('600 14px Vazirmatn'); }catch(e){}
@@ -1910,6 +1919,7 @@ async function shareImg3(c, onReady, asPdf){
       file = new File([jpg], `${c.n}.jpg`, { type: 'image/jpeg' });
       fallbackUrl = jpg;
     }
+    if(typeof build === 'function'){ build(file); return; }
     if(navigator.canShare && navigator.canShare({ files: [file] })){
       try{ await navigator.share({ files: [file], title: c.n }); return; }catch(e){ return; }
     }
@@ -3661,9 +3671,15 @@ document.addEventListener('click', async e => {
     case 'emailSend': emailSend(); break;
     case 'emailConfirm': emailConfirm(); break;
 
-    case 'share': openSheet(SHEETS.share(p, c)); break;
+    case 'share': openSheet(SHEETS.share(p, c)); prewarmShare(c); break;
     case 'shareAs': {
       const kind = el.dataset.v;
+      const pre = (kind === 'pdf' || kind === 'img') ? SHAREPRE[`${kind}:${c.id}`] : null;
+      if(pre && navigator.canShare && navigator.canShare({ files: [pre] })){
+        navigator.share({ files: [pre], title: c.n }).catch(() => {});
+        closeSheet();
+        break;
+      }
       const lbl = el.querySelector('span');
       if(lbl) lbl.textContent = 'در حال آماده‌سازی...';
       el.disabled = true;
