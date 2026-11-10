@@ -2943,7 +2943,7 @@ async function lgImg(rows, onReady){
   a.href = URL.createObjectURL(blob); a.download = 'dakhl-kharj.png'; a.click();
 }
 
-let LG = { type:'in', amt:'', desc:'', date:'', hh:'', mm:'', err:'', editId:null, sel:null };
+let LG = { type:'out', amt:'', desc:'', date:'', hh:'', mm:'', err:'', editId:null, sel:null };
 function ledgerCapture(){
   const g = id => document.getElementById(id);
   if(g('f-amount')) LG.amt = latin(g('f-amount').value).replace(/\D/g, '');
@@ -2976,7 +2976,7 @@ function ledgerFormHTML(){
       <p class="hint" id="lg-err" style="color:var(--neg);margin:4px 2px"></p>
       <button class="btn pri-btn" data-a="ledgerSave">${LG.editId ? 'ثبت ویرایش' : 'ثبت'}</button>`;
 }
-function ledgerFresh(){ return { type:'in', amt:'', desc:'', date:todayStr(), hh:new Date().getHours(), mm:new Date().getMinutes(), err:'', editId:null, sel:null }; }
+function ledgerFresh(){ return { type:'out', amt:'', desc:'', date:todayStr(), hh:new Date().getHours(), mm:new Date().getMinutes(), err:'', editId:null, sel:null }; }
 /* ---------- آخرین بروزرسانی سرور (نگه‌دارندهٔ Supabase) ---------- */
 let KA = { t:null, state:'idle' };   /* idle | loading | ok | none | err */
 function kaFmt(iso){
@@ -3483,7 +3483,7 @@ document.addEventListener('click', async e => {
   switch(a){
     case 'menu': goTo({view:'menu'}); break;
     case 'openSettings': SUI.curOpen = false; goTo({view:'settings'}); break;
-    case 'ledgerOpen': LG = { type:'in', amt:'', desc:'', date:todayStr(), hh:new Date().getHours(), mm:new Date().getMinutes(), err:'', editId:null, sel:null }; goTo({view:'ledger'}); break;
+    case 'ledgerOpen': LG = { type:'out', amt:'', desc:'', date:todayStr(), hh:new Date().getHours(), mm:new Date().getMinutes(), err:'', editId:null, sel:null }; goTo({view:'ledger'}); break;
     case 'ledgerMenu': goTo({view:'ledgerMenu'}); break;
     case 'lgFilter': LGF = el.dataset.v; render(); break;
     case 'ledgerDelAll': openSheet(SHEETS.confirmDel('ledgerAll', '', null, null, null)); break;
@@ -3567,7 +3567,7 @@ document.addEventListener('click', async e => {
       setTimeout(() => openSheet(ledgerFormHTML()), 150); break;
     }
     case 'ledgerCancel':
-      LG = { type:'in', amt:'', desc:'', date:todayStr(), hh:new Date().getHours(), mm:new Date().getMinutes(), err:'', editId:null, sel:null };
+      LG = { type:'out', amt:'', desc:'', date:todayStr(), hh:new Date().getHours(), mm:new Date().getMinutes(), err:'', editId:null, sel:null };
       render(); break;
     case 'ledgerDel':
       openSheet(SHEETS.confirmDel('ledger', '', null, null, { id: el.dataset.id }));
