@@ -448,6 +448,12 @@ body:has(#main > .list), body:has(#main > .lg-scroll), body:has(#main > #nbRows)
 #main:has(> .list) .cq-wrap input{padding:15px 16px !important;font-size:16px !important;min-height:54px;border-radius:16px !important}
 #main:has(> .list) .cq-lbl{font-size:16px !important;margin:0 4px 0 0 !important;padding-right:4px}
 
+/* دکمهٔ کوچک داخل قالب جستجوی مشتری: تغییر کیبورد بین متنی و عددی */
+#main:has(> .list) .cq-field{position:relative;flex:1;min-width:0;display:flex}
+#main:has(> .list) .cq-field input{flex:1;min-width:0;padding-left:64px !important}
+.cq-mode{position:absolute;left:8px;top:50%;transform:translateY(-50%);height:36px;min-width:44px;padding:0 10px;border-radius:12px;border:1px solid var(--line);background:#fff;color:var(--deep);font-size:14px;font-weight:700;line-height:1;cursor:pointer;font-family:inherit}
+.cq-mode:active{background:var(--line)}
+
 /* فهرست مشتریان بالا می‌رود و درست از زیر قالب جستجو رد می‌شود؛ عنوان «مشتریان» هم قالب کوچک خودش را دارد */
 #main:has(> .list) > .list{margin-top:0 !important;padding-top:0 !important}
 #main:has(> .list) .cq-wrap{margin:0 0 6px !important}
@@ -473,11 +479,18 @@ body:has(#main > .list), body:has(#main > .lg-scroll), body:has(#main > #nbRows)
 /* فشرده‌سازی قالب دخل و خرج شخصی، و نزدیک‌تر کردن قالب جستجو و «مشتریان» تا جای بیشتری برای ردیف مشتریان بماند */
 #main .opt.ledger-open{padding:11px 14px !important;font-size:16px !important;border-radius:14px !important}
 #main .opt.ledger-open .sub svg{width:22px !important;height:22px !important}
-#main:has(> .list) > .opt-list{margin:2px 0 0 !important}
+#main:has(> .list) > .opt-list{margin:2px 0 8px !important}
 #main:has(> .list) .cq-wrap{margin:0 0 4px !important;gap:8px !important}
 #main:has(> .list) .cq-lbl{width:92px;min-height:46px;height:46px;font-size:14px !important}
 #main:has(> .list) .cq-wrap input{height:46px;min-height:46px !important;padding:0 12px !important;font-size:14px !important;border-radius:14px !important}
 #main:has(> .list) > .list{margin-top:0 !important;padding-top:0 !important}
+/* «مشتریان»: همان رنگ و خط اطراف و متن قالب جستجو */
+#main:has(> .list) .cq-lbl{background:#fff !important;border:1px solid var(--line) !important;border-radius:14px !important;color:var(--text) !important;font-weight:700 !important;box-sizing:border-box}
+/* دور قالب جستجوی مشتری و «مشتریان» به رنگ اصلی برنامه؛ داخل قالب‌ها بدون تغییر */
+#main:has(> .list) .cq-lbl{border-color:var(--pri) !important;border-width:1.5px !important}
+#main:has(> .list) .cq-wrap input#cq{border:1.5px solid var(--pri) !important}
+/* خط دور قالب «دخل و خرج شخصی» به رنگ اصلی برنامه */
+#main .opt.ledger-open{border:1.5px solid var(--pri) !important}
 </style>
 </head>
 <body>
@@ -973,6 +986,7 @@ function lpWrap(key, card, acts){
 }
 
 /* ---------- دفتر یادداشت‌ها: دفترچه‌ها و یادداشت‌ها ---------- */
+let CQMODE = 'text';
 let NB = [], NY = [], NBLOADED = false, NBLOADING = false, NBTRIED = false;
 let NBFROM = '', NBTO = '', NBQ = '', NBPICK = false, NBCUR = null;
 /* دفترچه‌ی باز را در گوشی نگه می‌داریم تا بعد از بیرون رفتن یا بارگذاری دوباره، همان دفترچه باز بماند */
@@ -1931,7 +1945,7 @@ function partySection(p){
     </div>
     <div class="opt-list" style="margin:14px 0 8px"><button class="opt ledger-open" data-a="ledgerOpen"><span>دخل و خرج شخصی</span><span class="sub">${ICON.chev}</span></button></div>
     
-    <div class="cq-wrap"><span class="cq-lbl">مشتریان</span><input id="cq" type="search" placeholder="جستجوی نام یا شماره تلفن..." value="${esc(V.q)}"></div>
+    <div class="cq-wrap"><span class="cq-lbl">مشتریان</span><div class="cq-field"><input id="cq" type="search" inputmode="${CQMODE}" placeholder="جستجوی نام یا شماره تلفن..." value="${esc(V.q)}"><button type="button" class="cq-mode" id="cqMode" aria-label="${CQMODE === 'numeric' ? 'کیبورد عددی فعال است' : 'کیبورد متنی فعال است'}">${CQMODE === 'numeric' ? '۱۲۳' : 'abc'}</button></div></div>
     <div class="list">
       ${custs.length ? custs.map(c => {
         const b = custBal(c), col = colorFor(c.n);
@@ -4167,6 +4181,15 @@ document.addEventListener('keydown', e => {
   }
 });
 
+/* حالت کیبورد جستجوی مشتری: متنی یا عددی؛ با هر بار زدن دکمه بین این دو عوض می‌شود */
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('#cqMode');
+  if(!b) return;
+  CQMODE = CQMODE === 'text' ? 'numeric' : 'text';
+  render();
+  const i = document.getElementById('cq');
+  if(i){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+});
 document.addEventListener('input', e => {
   if(e.target.id === 'q'){ V.q = e.target.value; render(); return; }
   if(e.target.id === 'lgq'){
