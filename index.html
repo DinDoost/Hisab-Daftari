@@ -1410,7 +1410,7 @@ function render(){
       </header>
       <section class="hero">
         <div class="lbl">صورت حساب: ${esc(c.n)}</div>
-        <div class="net"><span>${num(bal)}</span><span>${curLabel()}</span><span style="font-size:15px;font-weight:700;color:${bal > 0 ? '#fca5a5' : bal < 0 ? '#86efac' : '#fff'}">« ${bal > 0 ? 'بدهکار است' : bal < 0 ? 'طلب دارد' : 'تسویه'} »</span></div>
+        <div class="net"><span>${num(bal)}</span><span>${curLabel()}</span><span style="font-size:15px;font-weight:700;color:${bal > 0 ? '#86efac' : bal < 0 ? '#fca5a5' : '#fff'}">« ${bal > 0 ? 'بدهکار است' : bal < 0 ? 'طلب دارد' : 'تسویه'} »</span></div>
         <div class="mini-row">
           <div class="mini"><span class="mini-name" style="display:block;white-space:nowrap;overflow:hidden">گرفت: ${esc(c.n)}</span><b>${money(debts)}</b></div>
           <div class="mini"><span class="mini-name" style="display:block;white-space:nowrap;overflow:hidden">پرداخت: ${esc(c.n)}</span><b>${money(pays)}</b></div>
@@ -1741,7 +1741,7 @@ function invData(c){
 function invHTML3(c){
   const d = invData(c);
   const t = today();
-  const bc = d.bal > 0 ? '#c0392b' : d.bal < 0 ? '#1e7a4c' : '#333';
+  const bc = d.bal > 0 ? '#1e7a4c' : d.bal < 0 ? '#c0392b' : '#333';
   const bl = d.bal > 0 ? 'بدهکار' : d.bal < 0 ? 'طلبکار' : '';
   const trs = d.rows.map(r => `<tr>
       <td>${r.no}</td>
@@ -1898,7 +1898,7 @@ async function shareImg3(c, onReady, asPdf, build){
   x.font = `bold 17px ${font}`; x.fillStyle = '#1f2937';
   fitText(x, amt(d.got), SC.got, 132, 240, 17, font, true);
   fitText(x, amt(d.pay), SC.pay, 132, 240, 17, font, true);
-  const bc = d.bal > 0 ? '#c0392b' : d.bal < 0 ? '#1e7a4c' : '#4b5563';
+  const bc = d.bal > 0 ? '#1e7a4c' : d.bal < 0 ? '#c0392b' : '#4b5563';
   const bl = d.bal > 0 ? ' (بدهکار)' : d.bal < 0 ? ' (طلبکار)' : '';
   x.fillStyle = bc;
   fitText(x, amt(d.bal) + bl, SC.bal, 132, 210, 17, font, true);
@@ -3346,7 +3346,7 @@ function renderPortal(){
     const shown = txs.filter(t => PT === 'pay' ? Number(t.a) < 0 : PT === 'get' ? Number(t.a) > 0 : true);
     const rows = shown.length
       ? shown.map(t => `
-        <div class="card tx-card" style="cursor:default"><span class="nm tx-nm"><b${TXEXP.has('pt' + (t.id || t.ts)) ? ' class="open"' : ''} data-a="txDescToggle" data-id="${esc('pt' + (t.id || t.ts))}">${esc(t.d || 'بدون شرح')}</b><small>${jStr(t.y, t.m, t.dd)}${t.hh != null ? ' · ' + clockText(Number(t.hh), Number(t.mm) || 0) : ''}</small></span><span class="bal ${balCls(Number(t.a) || 0)}">${money(Number(t.a) || 0)}</span></div>`).join('')
+        <div class="card tx-card" style="cursor:default"><span class="nm tx-nm"><b${TXEXP.has('pt' + (t.id || t.ts)) ? ' class="open"' : ''} data-a="txDescToggle" data-id="${esc('pt' + (t.id || t.ts))}">${esc(t.d || 'بدون شرح')}</b><small>${jStr(t.y, t.m, t.dd)}${t.hh != null ? ' · ' + clockText(Number(t.hh), Number(t.mm) || 0) : ''}</small></span><span class="bal ${cls(Number(t.a) || 0)}">${money(Number(t.a) || 0)}</span></div>`).join('')
       : `<div class="empty">${txs.length ? 'تراکنشی در این بخش نیست.' : 'هنوز تراکنشی ثبت نشده.'}</div>`;
     el.innerHTML = `
       <div class="pt-wrap pt-stmt">
@@ -3358,13 +3358,13 @@ function renderPortal(){
         ${PORTAL.note ? `<div class="hint" style="color:#0b4d2b;font-weight:700">${esc(PORTAL.note)}</div>` : ''}
         <section class="hero">
           <div class="lbl">صورت حساب: ${nm}</div>
-          <div class="net" style="flex-wrap:wrap"><span>${num(bal)}</span><span>${curLabel()}</span><small style="font-size:15px;font-weight:700;color:${bal > 0 ? '#fca5a5' : bal < 0 ? '#86efac' : '#fff'}">«${status}»</small></div>
+          <div class="net" style="flex-wrap:wrap"><span>${num(bal)}</span><span>${curLabel()}</span><small style="font-size:15px;font-weight:700;color:${bal > 0 ? '#86efac' : bal < 0 ? '#fca5a5' : '#fff'}">«${status}»</small></div>
           <div class="mini-row">
             <div class="mini"><span class="mini-name" style="display:block;white-space:nowrap;overflow:hidden">گرفت: ${nm}</span><b>${money(got)}</b></div>
             <div class="mini"><span class="mini-name" style="display:block;white-space:nowrap;overflow:hidden">پرداخت: ${nm}</span><b>${money(paid)}</b></div>
           </div>
         </section>
-        <div class="sec-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span>تراکنش‌ها</span><div class="cf-types" style="flex:none"><button type="button" class="${PT === 'all' ? 'on' : ''}" data-a="ptType" data-v="all">همه</button><button type="button" class="r${PT === 'pay' ? ' on' : ''}" data-a="ptType" data-v="pay">پرداخت</button><button type="button" class="g${PT === 'get' ? ' on' : ''}" data-a="ptType" data-v="get">گرفت</button></div></div>
+        <div class="sec-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span>تراکنش‌ها</span><div class="cf-types" style="flex:none"><button type="button" class="${PT === 'all' ? 'on' : ''}" data-a="ptType" data-v="all">همه</button><button type="button" class="g${PT === 'pay' ? ' on' : ''}" data-a="ptType" data-v="pay">پرداخت</button><button type="button" class="r${PT === 'get' ? ' on' : ''}" data-a="ptType" data-v="get">گرفت</button></div></div>
         <div class="list pt-list">${rows}
         <p class="hint" style="margin-top:6px">این صفحه فقط برای مشاهده است.</p></div>
       </div>`;
