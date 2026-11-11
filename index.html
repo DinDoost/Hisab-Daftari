@@ -794,7 +794,7 @@ function custCalHTML(){
   const lbl = o => o ? jStr(o.y, o.m, o.d) : 'انتخاب کنید';
   const T = CF.type || 'all';
   const tb = (v, txt, cls) => `<button type="button" class="${cls}${T === v ? ' on' : ''}" data-a="cfType" data-v="${v}">${txt}</button>`;
-  return `<div class="sh-h"><span>فیلتر تاریخ</span><div class="cf-types">${tb('all','همه','')}${tb('pay','پرداخت','r')}${tb('get','گرفت','g')}</div><button type="button" class="ic" data-a="close" aria-label="بستن">${ICON.close}</button></div>` + `
+  return `<div class="sh-h"><span>فیلتر تاریخ</span><div class="cf-types">${tb('all','همه','')}${tb('pay','پرداخت','g')}${tb('get','گرفت','r')}</div><button type="button" class="ic" data-a="close" aria-label="بستن">${ICON.close}</button></div>` + `
       <label>از تاریخ</label>
       <button type="button" class="dbtn" data-a="cfCalPick" data-v="from"><span id="cff-t">${lbl(CF.from)}</span><span class="cal-ic">${ICON.cal}</span></button>
       <label>تا تاریخ</label>
