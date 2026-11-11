@@ -794,7 +794,7 @@ function custCalHTML(){
   const lbl = o => o ? jStr(o.y, o.m, o.d) : 'انتخاب کنید';
   const T = CF.type || 'all';
   const tb = (v, txt, cls) => `<button type="button" class="${cls}${T === v ? ' on' : ''}" data-a="cfType" data-v="${v}">${txt}</button>`;
-  return `<div class="sh-h"><span>فیلتر تاریخ</span><div class="cf-types">${tb('all','همه','')}${tb('pay','پرداخت','g')}${tb('get','گرفت','r')}</div><button type="button" class="ic" data-a="close" aria-label="بستن">${ICON.close}</button></div>` + `
+  return `<div class="sh-h"><span>فیلتر تاریخ</span><div class="cf-types">${tb('all','همه','')}${tb('pay','پرداخت','r')}${tb('get','گرفت','g')}</div><button type="button" class="ic" data-a="close" aria-label="بستن">${ICON.close}</button></div>` + `
       <label>از تاریخ</label>
       <button type="button" class="dbtn" data-a="cfCalPick" data-v="from"><span id="cff-t">${lbl(CF.from)}</span><span class="cal-ic">${ICON.cal}</span></button>
       <label>تا تاریخ</label>
@@ -3334,16 +3334,18 @@ function renderPortal(){
       </div>`;
   } else {
     const d = PORTAL.data || {};
+    const PT = PORTAL.type || 'all';
     const nm = esc(d.name || '');
     const txs = (d.transactions || []).slice().sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0));
     const bal = txs.reduce((s, t) => s + (Number(t.a) || 0), 0);
     const got = txs.filter(t => Number(t.a) > 0).reduce((s, t) => s + Number(t.a), 0);
     const paid = txs.filter(t => Number(t.a) < 0).reduce((s, t) => s - Number(t.a), 0);
     const status = bal > 0 ? 'بدهکار است' : bal < 0 ? 'طلب دارد' : 'تسویه';
-    const rows = txs.length
-      ? txs.map(t => `
+    const shown = txs.filter(t => PT === 'pay' ? Number(t.a) < 0 : PT === 'get' ? Number(t.a) > 0 : true);
+    const rows = shown.length
+      ? shown.map(t => `
         <div class="card tx-card" style="cursor:default"><span class="nm tx-nm"><b${TXEXP.has('pt' + (t.id || t.ts)) ? ' class="open"' : ''} data-a="txDescToggle" data-id="${esc('pt' + (t.id || t.ts))}">${esc(t.d || 'بدون شرح')}</b><small>${jStr(t.y, t.m, t.dd)}${t.hh != null ? ' · ' + clockText(Number(t.hh), Number(t.mm) || 0) : ''}</small></span><span class="bal ${balCls(Number(t.a) || 0)}">${money(Number(t.a) || 0)}</span></div>`).join('')
-      : `<div class="empty">هنوز تراکنشی ثبت نشده.</div>`;
+      : `<div class="empty">${txs.length ? 'تراکنشی در این بخش نیست.' : 'هنوز تراکنشی ثبت نشده.'}</div>`;
     el.innerHTML = `
       <div class="pt-wrap pt-stmt">
         <div class="pt-top"><button class="ic" data-a="portalMenu" aria-label="گزینه‌ها"><span class="pt-dots">⋮</span></button><h1>${nm}</h1><button class="ic" data-a="portalClose" aria-label="برگشت">${ICON.back}</button></div>
@@ -3360,7 +3362,7 @@ function renderPortal(){
             <div class="mini"><span class="mini-name" style="display:block;white-space:nowrap;overflow:hidden">پرداخت: ${nm}</span><b>${money(paid)}</b></div>
           </div>
         </section>
-        <div class="sec-title">تراکنش‌ها</div>
+        <div class="sec-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span>تراکنش‌ها</span><div class="cf-types" style="flex:none"><button type="button" class="${PT === 'all' ? 'on' : ''}" data-a="ptType" data-v="all">همه</button><button type="button" class="r${PT === 'pay' ? ' on' : ''}" data-a="ptType" data-v="pay">پرداخت</button><button type="button" class="g${PT === 'get' ? ' on' : ''}" data-a="ptType" data-v="get">گرفت</button></div></div>
         <div class="list pt-list">${rows}
         <p class="hint" style="margin-top:6px">این صفحه فقط برای مشاهده است.</p></div>
       </div>`;
@@ -4051,6 +4053,7 @@ document.addEventListener('click', async e => {
       closePortalByUser(); break;
     case 'portalLogin':
       portalLogin(); break;
+    case 'ptType': PORTAL.type = el.dataset.v; renderPortal(); break;
     case 'portalMenu': PORTAL.menu = true; PORTAL.note = ''; pushOv('ptmenu'); renderPortal(); break;
     case 'ptMenuBack': PORTAL.menu = false; renderPortal(); if(OV.includes('ptmenu')) popOv('ptmenu'); break;
     case 'ptSetBack': PORTAL.setPin = false; PORTAL.menu = true; PORTAL.err = ''; renderPortal(); break;
