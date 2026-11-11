@@ -137,6 +137,11 @@ input:focus,select:focus{outline:2px solid #9fb9de;border-color:transparent}
 .lg-filt button.on{background:var(--pri);color:#fff}
 .lg-filt button.on.r{background:#c0392b}
 .lg-filt button.on.g{background:#1e7a4c}
+.cf-types{display:flex;gap:6px;justify-content:center;align-items:center;flex:1;min-width:0}
+.cf-types button{border:0;border-radius:999px;background:var(--soft);color:var(--deep);font:inherit;font-size:14px;font-weight:700;padding:7px 14px;cursor:pointer;line-height:1.3;white-space:nowrap}
+.cf-types button.on{background:var(--pri);color:#fff}
+.cf-types button.g.on{background:#1e7a4c}
+.cf-types button.r.on{background:#c0392b}
 .pt-sky{display:block;width:100%;margin:12px 0;padding:18px 16px;border:0;border-radius:16px;background:#c7d7f0;color:#1b4a7a;font:inherit;font-weight:700;font-size:16px;text-align:right;cursor:pointer}
 .pt-h-s{font-size:16px;font-weight:800;margin:0;color:#1f2937}
 .pt-q{font-size:15px;font-weight:800;text-align:center;color:#1f2937;margin:28px 0 14px}
@@ -776,16 +781,20 @@ function txFiltered(c){
   const fr = lgKey(CF.from), to = lgKey(CF.to);
   return txList(c).filter(t => {
     if(q && !txNorm(t.d).includes(q)) return false;
+    if(CF.type === 'pay' && !(t.a < 0)) return false;
+    if(CF.type === 'get' && !(t.a > 0)) return false;
     const k = t.y * 10000 + t.m * 100 + t.dd;
     if(fr !== null && k < fr) return false;
     if(to !== null && k > to) return false;
     return true;
   });
 }
-function cfOn(){ return !!(CF.from || CF.to); }
+function cfOn(){ return !!(CF.from || CF.to || (CF.type && CF.type !== 'all')); }
 function custCalHTML(){
   const lbl = o => o ? jStr(o.y, o.m, o.d) : 'انتخاب کنید';
-  return sheetHead('فیلتر تاریخ') + `
+  const T = CF.type || 'all';
+  const tb = (v, txt, cls) => `<button type="button" class="${cls}${T === v ? ' on' : ''}" data-a="cfType" data-v="${v}">${txt}</button>`;
+  return `<div class="sh-h"><span>فیلتر تاریخ</span><div class="cf-types">${tb('all','همه','')}${tb('pay','پرداخت','g')}${tb('get','گرفت','r')}</div><button type="button" class="ic" data-a="close" aria-label="بستن">${ICON.close}</button></div>` + `
       <label>از تاریخ</label>
       <button type="button" class="dbtn" data-a="cfCalPick" data-v="from"><span id="cff-t">${lbl(CF.from)}</span><span class="cal-ic">${ICON.cal}</span></button>
       <label>تا تاریخ</label>
@@ -854,7 +863,7 @@ async function commitWrite(mutate, okMsg, btn){
 let S = load();
 let V = { view:'list', openId:null, custId:null, search:false, q:'' };
 let TXQ = '', TXQ_CID = null;   /* جستجوی شرح مبلغ داخل صفحه مشتری */
-let CF = { from:null, to:null };   /* فیلتر تاریخ تراکنش‌های مشتری، مثل فیلتر یادداشت‌ها */
+let CF = { from:null, to:null, type:'all' };   /* فیلتر تاریخ تراکنش‌های مشتری، مثل فیلتر یادداشت‌ها */
 /* بعد از بروزرسانی خودکار، همان صفحه‌ای که بودید دوباره باز می‌شود */
 try{
   const rs = JSON.parse(sessionStorage.getItem('hesab-resume') || 'null');
@@ -1387,7 +1396,7 @@ function render(){
   if(V.view === 'cust'){
     const p = findParty(V.openId), c = p && findCust(p.id, V.custId);
     if(!c){ V.view = 'detail'; V.custId = null; return render(); }
-    if(TXQ_CID !== c.id){ TXQ = ''; CF = { from:null, to:null }; TXQ_CID = c.id; }
+    if(TXQ_CID !== c.id){ TXQ = ''; CF = { from:null, to:null, type:'all' }; TXQ_CID = c.id; }
     const bal = custBal(c);
     const debts = c.tx.filter(t => t.a > 0).reduce((s, t) => s + t.a, 0);
     const pays = c.tx.filter(t => t.a < 0).reduce((s, t) => s - t.a, 0);
@@ -1414,7 +1423,7 @@ function render(){
         <button type="button" class="ic" data-a="cfCalOpen" aria-label="فیلتر تاریخ" style="${cfOn() ? 'color:var(--pri)' : ''}">${ICON.cal}</button>
       </div>
       <div class="sec-title">تراکنش‌ها</div>
-      ${cfOn() ? `<div class="hint" style="margin:0 4px 6px">تراکنش‌ها ${CF.from ? 'از ' + esc(jStr(CF.from.y, CF.from.m, CF.from.d)) : ''} ${CF.to ? 'تا ' + esc(jStr(CF.to.y, CF.to.m, CF.to.d)) : ''} <button class="pbtn" data-a="cfClear"><span>نمایش همه</span></button></div>` : ''}
+      ${cfOn() ? `<div class="hint" style="margin:0 4px 6px">${CF.type === 'pay' ? 'فقط پرداخت‌ها' : CF.type === 'get' ? 'فقط گرفت‌ها' : 'تراکنش‌ها'} ${CF.from ? 'از ' + esc(jStr(CF.from.y, CF.from.m, CF.from.d)) : ''} ${CF.to ? 'تا ' + esc(jStr(CF.to.y, CF.to.m, CF.to.d)) : ''} <button class="pbtn" data-a="cfClear"><span>نمایش همه</span></button></div>` : ''}
       <div class="list">
         ${txFiltered(c).length ? txFiltered(c).map(t => {
           const key = `txmode:${p.id}:${c.id}:${t.id}`;
@@ -3561,8 +3570,9 @@ document.addEventListener('click', async e => {
       CAL = { open:true, mode:'days', sel:{ y:dt.y, m:dt.m, d:dt.d }, vy:dt.y, vm:dt.m, tgt: el.dataset.v === 'from' ? 'cfFrom' : 'cfTo' };
       calRender(); break;
     }
+    case 'cfType': CF = { ...CF, type: el.dataset.v }; document.querySelectorAll('#sheet .cf-types button').forEach(b => b.classList.toggle('on', b === el)); break;
     case 'cfApply': closeSheet(); render(); break;
-    case 'cfClear': CF = { from:null, to:null }; closeSheet(); render(); break;
+    case 'cfClear': CF = { from:null, to:null, type:'all' }; closeSheet(); render(); break;
     case 'lgFilterOpen': openSheet(lgFilterHTML()); break;
     case 'lgDate': {
       const o = el.dataset.v === 'from' ? LGFR : LGTO;
