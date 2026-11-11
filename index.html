@@ -819,6 +819,7 @@ function load(){
   return d;
 }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} queueCloudSync(); }
+const NET_MSG = 'اینترنت قطع است. به اینترنت وصل شوید و دوباره انجام دهید، یا اینترنت خود را بررسی کنید.';
 let toastTimer = null;
 function showToast(message, ok){
   let el = document.getElementById('app-toast');
@@ -843,7 +844,7 @@ async function cloudCommit(){
 }
 async function commitWrite(mutate, okMsg, btn){
   if(WRITING) return false;
-  if(!navigator.onLine){ showToast('برای ثبت، اول به انترنت وصل شوید.'); return false; }
+  if(!navigator.onLine){ showToast(NET_MSG); return false; }
   WRITING = true;
   if(btn) btn.classList.add('busy');
   const snap = JSON.stringify(S);
@@ -851,11 +852,12 @@ async function commitWrite(mutate, okMsg, btn){
     mutate();
     if(!(await cloudCommit())){
       S = JSON.parse(snap);
-      showToast('ثبت انجام نشد. به انترنت وصل شوید و دوباره تلاش کنید.');
+      showToast('ثبت انجام نشد. اینترنت ضعیف است؛ دوباره تلاش کنید یا اینترنت خود را بررسی کنید.');
       render();
       return false;
     }
     try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){}
+    playBell();
     if(okMsg) showToast(okMsg, true);
     return true;
   } finally { WRITING = false; if(btn) btn.classList.remove('busy'); }
@@ -1091,7 +1093,7 @@ async function nbDeleteRow(table, id){
   return true;
 }
 function nbOnline(){
-  if(!navigator.onLine){ showToast('برای ثبت، اول به انترنت وصل شوید.'); return false; }
+  if(!navigator.onLine){ showToast(NET_MSG); return false; }
   return true;
 }
 function nbShort(t){ t = (t || '').split('\n')[0]; return t.length > 80 ? t.slice(0, 80) + '…' : t; }
@@ -3634,7 +3636,6 @@ document.addEventListener('click', async e => {
         break;
       }
       showToast(lgWasEdit ? 'ویرایش با موفقیت ثبت شد' : 'تراکنش با موفقیت ثبت شد', true);
-      playBell();
       LG = ledgerFresh();
       closeSheet(); render(); break;
     }
@@ -3680,7 +3681,7 @@ document.addEventListener('click', async e => {
       SUI.curOpen = false; render(); break;
 
     case 'reset':
-      if(!navigator.onLine){ showToast('برای این کار اول به اینترنت وصل شوید.'); break; }
+      if(!navigator.onLine){ showToast(NET_MSG); break; }
       if(confirm('همه طرف حساب‌ها و مشتری‌ها پاک شوند؟ این کار قابل بازگشت نیست.')){
         S = { cur: S.cur, parties: [] }; save();
         V = { view:'list', openId:null, custId:null, search:false, q:'' };
@@ -3850,7 +3851,7 @@ document.addEventListener('click', async e => {
       if(NBCUR === id) NBCUR = null;
       closeSheet();
       goTo({view:'nbList'}, true);
-      showToast('دفترچه حذف شد', true);
+      playBell(); showToast('دفترچه حذف شد', true);
       break;
     }
     case 'nbCalOpen': openSheet(sheetHead('فیلتر تاریخ') + `
@@ -3978,7 +3979,7 @@ document.addEventListener('click', async e => {
       el.classList.remove('busy');
       if(!ok){ showToast('حذف یادداشت انجام نشد.'); return; }
       NY = NY.filter(x => x.id !== id);
-      closeSheet(); render(); showToast('یادداشت حذف شد', true);
+      closeSheet(); render(); playBell(); showToast('یادداشت حذف شد', true);
       break;
     }
     case 'addParty': openSheet(SHEETS.partyAdd()); break;
@@ -4264,7 +4265,7 @@ document.addEventListener('click', async e => {
         }
       }, t ? 'تراکنش ویرایش و ثبت شد' : 'تراکنش ثبت شد');
       el.classList.remove('busy');
-      if(okTx){ playBell(); afterTx(); }
+      if(okTx){ afterTx(); }
       break;
     }
     case 'delTx':
