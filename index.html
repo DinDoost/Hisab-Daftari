@@ -447,6 +447,11 @@ body:has(#main > .list), body:has(#main > .lg-scroll), body:has(#main > #nbRows)
 #main:has(> .list) .cq-wrap{margin:0 0 10px !important;padding:0 !important;width:100%;display:flex;align-items:center;gap:8px}
 #main:has(> .list) .cq-wrap input{padding:15px 16px !important;font-size:16px !important;min-height:54px;border-radius:16px !important}
 #main:has(> .list) .cq-lbl{font-size:16px !important;margin:0 4px 0 0 !important;padding-right:4px}
+/* قالب جستجوی شرح مبلغ در صفحه مشتری: هم‌اندازه‌ی قالب جستجوی مشتریان */
+#main:has(> .list) .txq-inp{flex:1 1 auto;width:auto;min-width:0;height:46px;min-height:46px;padding:0 10px !important;font-size:13px !important;text-overflow:ellipsis;box-sizing:border-box;border:1.5px solid var(--pri) !important;border-radius:16px !important}
+#main:has(> .list) .txq-inp::placeholder{font-size:13px;white-space:nowrap;overflow:visible}
+/* وقت لمس قالب جستجو، خط اضافه دور آن ظاهر نشود */
+#main:has(> .list) .txq-inp:focus,#main:has(> .list) .txq-inp:focus-visible{outline:none !important;box-shadow:none !important;-webkit-appearance:none;appearance:none}
 
 /* دکمهٔ کوچک داخل قالب جستجوی مشتری: تغییر کیبورد بین متنی و عددی */
 #main:has(> .list) .cq-field{position:relative;flex:1;min-width:0;display:flex}
@@ -762,6 +767,32 @@ function txList(c){
   }
   return sorted;
 }
+/* جستجوی شرح مبلغ: بی‌توجه به ی/ک عربی، فاصله و بزرگی حروف لاتین */
+function txNorm(s){
+  return String(s == null ? '' : s).toLowerCase().replace(/ي/g,'ی').replace(/ك/g,'ک').replace(/\u200c/g,' ').replace(/\s+/g,' ').trim();
+}
+function txFiltered(c){
+  const q = txNorm(TXQ);
+  const fr = lgKey(CF.from), to = lgKey(CF.to);
+  return txList(c).filter(t => {
+    if(q && !txNorm(t.d).includes(q)) return false;
+    const k = t.y * 10000 + t.m * 100 + t.dd;
+    if(fr !== null && k < fr) return false;
+    if(to !== null && k > to) return false;
+    return true;
+  });
+}
+function cfOn(){ return !!(CF.from || CF.to); }
+function custCalHTML(){
+  const lbl = o => o ? jStr(o.y, o.m, o.d) : 'انتخاب کنید';
+  return sheetHead('فیلتر تاریخ') + `
+      <label>از تاریخ</label>
+      <button type="button" class="dbtn" data-a="cfCalPick" data-v="from"><span id="cff-t">${lbl(CF.from)}</span><span class="cal-ic">${ICON.cal}</span></button>
+      <label>تا تاریخ</label>
+      <button type="button" class="dbtn" data-a="cfCalPick" data-v="to"><span id="cft-t">${lbl(CF.to)}</span><span class="cal-ic">${ICON.cal}</span></button>
+      <button type="button" class="btn pri-btn" data-a="cfApply">اعمال</button>
+      <button type="button" class="btn" style="background:var(--soft);color:var(--deep)" data-a="cfClear">پاک کردن فیلتر</button>`;
+}
 
 /* ---------- data ---------- */
 function load(){
@@ -822,6 +853,8 @@ async function commitWrite(mutate, okMsg, btn){
 }
 let S = load();
 let V = { view:'list', openId:null, custId:null, search:false, q:'' };
+let TXQ = '', TXQ_CID = null;   /* جستجوی شرح مبلغ داخل صفحه مشتری */
+let CF = { from:null, to:null };   /* فیلتر تاریخ تراکنش‌های مشتری، مثل فیلتر یادداشت‌ها */
 /* بعد از بروزرسانی خودکار، همان صفحه‌ای که بودید دوباره باز می‌شود */
 try{
   const rs = JSON.parse(sessionStorage.getItem('hesab-resume') || 'null');
@@ -1354,6 +1387,7 @@ function render(){
   if(V.view === 'cust'){
     const p = findParty(V.openId), c = p && findCust(p.id, V.custId);
     if(!c){ V.view = 'detail'; V.custId = null; return render(); }
+    if(TXQ_CID !== c.id){ TXQ = ''; CF = { from:null, to:null }; TXQ_CID = c.id; }
     const bal = custBal(c);
     const debts = c.tx.filter(t => t.a > 0).reduce((s, t) => s + t.a, 0);
     const pays = c.tx.filter(t => t.a < 0).reduce((s, t) => s - t.a, 0);
@@ -1361,7 +1395,7 @@ function render(){
       <header class="top">
         <span class="sp"></span>
         <h1>${esc(c.n)}</h1>
-        <span class="sp"></span>
+        <button class="ic" data-a="share" data-p="${p.id}" data-c="${c.id}" aria-label="اشتراک گذاری">${ICON.share}</button>
       </header>
       <section class="hero">
         <div class="lbl">صورت حساب: ${esc(c.n)}</div>
@@ -1372,15 +1406,17 @@ function render(){
         </div>
       </section>
       <div class="info" style="margin-top:14px;display:flex;align-items:center;gap:8px">
-        <div style="flex:1;min-width:0">
-          ${c.ph ? `<div><span>شماره تلفن: </span>${fa(c.ph)}</div>` : ''}
+        <div style="flex:0 0 auto;min-width:0">
+          ${c.ph ? `<div><span>شماره تلفن:</span><a href="tel:${esc(c.ph)}" style="color:inherit;text-decoration:none;direction:ltr;display:block;font-weight:700">${fa(c.ph)}</a></div>` : ''}
           ${c.ds ? `<div><span>توضیحات: </span>${esc(c.ds)}</div>` : ''}
         </div>
-        <button class="ic" data-a="share" data-p="${p.id}" data-c="${c.id}" aria-label="اشتراک گذاری">${ICON.share}</button>
+        <input id="txq" class="txq-inp" type="search" placeholder="جستجو در شرح مبلغ..." value="${esc(TXQ)}">
+        <button type="button" class="ic" data-a="cfCalOpen" aria-label="فیلتر تاریخ" style="${cfOn() ? 'color:var(--pri)' : ''}">${ICON.cal}</button>
       </div>
       <div class="sec-title">تراکنش‌ها</div>
+      ${cfOn() ? `<div class="hint" style="margin:0 4px 6px">تراکنش‌ها ${CF.from ? 'از ' + esc(jStr(CF.from.y, CF.from.m, CF.from.d)) : ''} ${CF.to ? 'تا ' + esc(jStr(CF.to.y, CF.to.m, CF.to.d)) : ''} <button class="pbtn" data-a="cfClear"><span>نمایش همه</span></button></div>` : ''}
       <div class="list">
-        ${c.tx.length ? txList(c).map(t => {
+        ${txFiltered(c).length ? txFiltered(c).map(t => {
           const key = `txmode:${p.id}:${c.id}:${t.id}`;
           const on = LPSEL && LPSEL.key === key;
           return `<div class="lp-wrap">
@@ -1395,7 +1431,9 @@ function render(){
           </div>` : ''}
           </div>`;
         }).join('')
-        : `<div class="empty">هنوز تراکنشی ثبت نشده.<br>با دکمه پایین صفحه، اولین تراکنش را ثبت کنید.</div>`}
+        : (c.tx.length && (txNorm(TXQ) || cfOn())
+            ? `<div class="empty">تراکنشی با این شرح پیدا نشد.</div>`
+            : `<div class="empty">هنوز تراکنشی ثبت نشده.<br>با دکمه پایین صفحه، اولین تراکنش را ثبت کنید.</div>`)}
       </div>
       <button class="fab" data-a="addTx" data-p="${p.id}" data-c="${c.id}">${ICON.plus}<span>ثبت تراکنش</span></button>`;
     return;
@@ -3515,6 +3553,16 @@ document.addEventListener('click', async e => {
     case 'ledgerMenu': goTo({view:'ledgerMenu'}); break;
     case 'lgFilter': LGF = el.dataset.v; render(); break;
     case 'ledgerDelAll': openSheet(SHEETS.confirmDel('ledgerAll', '', null, null, null)); break;
+    case 'cfCalOpen': openSheet(custCalHTML()); break;
+    case 'cfCalPick': {
+      const o = el.dataset.v === 'from' ? CF.from : CF.to;
+      const dt = o || today();
+      if(!OV.includes('cal')) pushOv('cal');
+      CAL = { open:true, mode:'days', sel:{ y:dt.y, m:dt.m, d:dt.d }, vy:dt.y, vm:dt.m, tgt: el.dataset.v === 'from' ? 'cfFrom' : 'cfTo' };
+      calRender(); break;
+    }
+    case 'cfApply': closeSheet(); render(); break;
+    case 'cfClear': CF = { from:null, to:null }; closeSheet(); render(); break;
     case 'lgFilterOpen': openSheet(lgFilterHTML()); break;
     case 'lgDate': {
       const o = el.dataset.v === 'from' ? LGFR : LGTO;
@@ -4157,6 +4205,14 @@ document.addEventListener('click', async e => {
       const okD = Math.min(CAL.sel.d, daysIn(CAL.vy, CAL.vm));
       CAL.sel = { y: CAL.vy, m: CAL.vm, d: okD };
       const s = jStr(CAL.sel.y, CAL.sel.m, CAL.sel.d);
+      if(CAL.tgt === 'cfFrom' || CAL.tgt === 'cfTo'){
+        const isF = CAL.tgt === 'cfFrom';
+        const o = { y: CAL.sel.y, m: CAL.sel.m, d: CAL.sel.d };
+        if(isF) CF = { ...CF, from: o }; else CF = { ...CF, to: o };
+        CAL.tgt = null;
+        const sp = document.getElementById(isF ? 'cff-t' : 'cft-t'); if(sp) sp.textContent = s;
+        closeCal(); break;
+      }
       if(CAL.tgt === 'nbFrom' || CAL.tgt === 'nbTo'){
         const isF = CAL.tgt === 'nbFrom';
         if(isF) NBFROM = s; else NBTO = s;
@@ -4235,6 +4291,12 @@ document.addEventListener('input', e => {
   if(e.target.id === 'cq'){
     V.q = e.target.value; render();
     const i = document.getElementById('cq');
+    if(i){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+    return;
+  }
+  if(e.target.id === 'txq'){
+    TXQ = e.target.value; render();
+    const i = document.getElementById('txq');
     if(i){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
     return;
   }
