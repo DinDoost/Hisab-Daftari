@@ -1310,10 +1310,12 @@ function render(){
   if(V.view === 'settings'){
     m.innerHTML = pageHead('تنظیمات', 'menu') + `
       <div class="st-page">
+      ${BK_PANEL === 'ask' ? '<div style="background:#fff8e6;border:1px solid #e6c46a;border-radius:12px;padding:14px;margin:10px 0;line-height:2">با تأیید، بکاپ‌گیری در پوشه دانلود انجام می‌شود.<br>برای بازیابی اطلاعات، از نسخه آفلاین استفاده کنید: در نسخه آفلاین، از تنظیمات گزینه «بازیابی از فایل پشتیبان» را بزنید و همین فایل را انتخاب کنید.<br><button class="srow-b" style="margin-top:8px" onclick="runBackup()">تأیید</button> <button class="srow-b" style="margin-top:8px" onclick="bkClose(false)">انصراف</button></div>' : ''}
       ${emailSection(4)}
       <div class="srow">
         <button class="srow-b" data-a="pinToggle">پین کد امنیتی: ${S.pin ? 'فعال' : 'غیرفعال'}</button>
         ${S.pin ? '<button class="srow-b" data-a="pinChange">تغییر پین</button>' : ''}
+        <button class="srow-b" onclick="showBackupAsk()">پشتیبان‌گیری</button>
         <button class="srow-b srow-out" data-a="authLogout">خروج از حساب</button>
         <div class="ka-row"><b>آخرین بروزرسانی سرور</b><span class="ka-v" id="ka-v">${kaText()}</span></div>
       </div>
@@ -4476,6 +4478,64 @@ async function initCloudSession(){
   else lkUnlock();
   /* اطلاعات ابری در پس‌زمینه خوانده می‌شود؛ اگر اینترنت نباشد، همان اطلاعات ذخیره‌شده نمایش داده می‌شود */
   refreshCloudQuiet();
+}
+
+
+/* ---- پشتیبان‌گیری: فایل در پوشهٔ دانلود ذخیره می‌شود ---- */
+let BK_PANEL = '';
+function showBackupAsk(){
+  BK_PANEL = 'ask';
+  history.pushState({ bk:1 }, '');
+  render();
+}
+/* بستن پنل؛ اگر از دکمهٔ برگشت گوشی آمده باشد، دوباره history.back نمی‌زند */
+function bkClose(fromPop){
+  if(!BK_PANEL) return;
+  BK_PANEL = '';
+  if(!fromPop){ try{ history.back(); }catch(e){} }
+  render();
+}
+window.addEventListener('popstate', () => { if(BK_PANEL) bkClose(true); });
+function bkTimeTxt(now){
+  const h = now.getHours();
+  const h12 = (h % 12) || 12;
+  const mi = String(now.getMinutes()).padStart(2, '0');
+  return h12 + ':' + mi + ' ' + (h < 12 ? 'ق.ظ' : 'ب.ظ');
+}
+async function bkNotebooks(){
+  /* یادداشت‌ها از سرور خوانده می‌شوند؛ اگر اینترنت نبود، نسخهٔ ذخیره‌شدهٔ همین حساب استفاده می‌شود */
+  if(navigator.onLine && cloudUser){ try{ await nbLoad(); }catch(e){} }
+  if(NB.length || NY.length) return { nb: NB, ny: NY };
+  try{
+    const c = JSON.parse(localStorage.getItem('hesab-nb-v1') || 'null');
+    if(c && cloudUser && c.uid === cloudUser.id) return { nb: c.nb || [], ny: c.ny || [] };
+  }catch(e){}
+  return { nb: NB, ny: NY };
+}
+async function runBackup(){
+  let cnt = 0; try{ cnt = Number(localStorage.getItem('hesab-backup-count') || 0); localStorage.setItem('hesab-backup-count', String(cnt + 1)); }catch(e){}
+  const n = (cnt % 10) + 1;   /* شماره‌ها ۱ تا ۱۰ و دوباره از ۱ */
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('fa-IR-u-ca-persian-nu-latn', { day:'numeric', month:'numeric', year:'numeric' }).formatToParts(now);
+  const pv = t => (parts.find(x => x.type === t) || {}).value || '';
+  /* ترتیب: سال-روز-ماه، مثل 1405-21-8 */
+  const dateTxt = pv('year') + '-' + pv('day') + '-' + pv('month');
+  const timeTxt = bkTimeTxt(now);
+  const fname = 'hisab.daftari-' + pv('day') + '-' + pv('month') + '-' + pv('year') + ' (' + n + ').json';
+  const nbData = await bkNotebooks();
+  const payload = {
+    app: 'hisab-backup', version: 1, created: now.toISOString(), backupNo: n,
+    data: { cur: S.cur || 'toman', parties: S.parties || [], ledger: S.ledger || [] },
+    notebooks: { nb: nbData.nb || [], ny: nbData.ny || [] }
+  };
+  const blob = new Blob([JSON.stringify(payload)], { type:'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = fname;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  bkClose(false);
+  showToast('پکاپ گیری با موفقیت در پوشه دانلود انجام شد', true);
 }
 
 initCloudSession();
