@@ -501,6 +501,13 @@ body:has(#main > .list), body:has(#main > .lg-scroll), body:has(#main > #nbRows)
 #main:has(> .list) .cq-wrap input#cq{border:1.5px solid var(--pri) !important}
 /* خط دور قالب «دخل و خرج شخصی» به رنگ اصلی برنامه */
 #main .opt.ledger-open{border:1.5px solid var(--pri) !important}
+.arch-hd{border:1.5px solid var(--pri);background:#fff;color:var(--text);border-radius:16px;padding:8px 16px;line-height:1.3;font-family:inherit;font-weight:700;font-size:15px;cursor:pointer;white-space:nowrap;flex:none}
+.arch-lbl{display:flex;align-items:center;justify-content:center;border:1.5px solid var(--pri);background:#fff;color:var(--text);border-radius:16px;padding:14px 16px;margin:12px 0 6px;font-weight:700;font-size:16px;min-height:54px}
+.lg-cur-list{display:flex;flex-direction:column;gap:10px;margin-top:4px}
+.lg-cur-row{display:flex;align-items:center;gap:12px;width:100%;border:1.5px solid var(--line);background:#fff;color:var(--text);border-radius:999px;padding:12px 20px;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer}
+.lg-cur-row.on{border-color:#16a34a}
+.lg-dot{width:22px;height:22px;border-radius:50%;border:2px solid var(--pri);background:#fff;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;flex:none}
+.lg-cur-row.on .lg-dot{background:#16a34a;border-color:#16a34a}
 </style>
 </head>
 <body>
@@ -525,6 +532,38 @@ const supabaseClient = window.supabase?.createClient
 let cloudUser = null, cloudReady = false, cloudSyncTimer = null;
 let cloudSyncing = false, cloudSyncAgain = false;
 let ledgerCloudOk = true, ledgerWarned = false, ledgerStrict = false, lastLedgerErr = '';
+
+/* تنظیمات مشترک هر کاربر (بایگانی و واحد دخل و خرج) در جدول s ذخیره می‌شود تا روی همه گوشی‌ها یکسان باشد */
+let SET_LAST_KEY = '', settingsTimer = null;
+function settingsKey(){ return JSON.stringify([lgCurKey(), S.archIds || []]); }
+async function settingsSyncNow(){
+  if(!supabaseClient || !cloudUser) return;
+  try{
+    const row = { u: cloudUser.id, lgcur: lgCurKey(), arc: S.archIds || [] };
+    const { error } = await supabaseClient.from('s').upsert(row, { onConflict:'u' });
+    if(error){ console.warn('settings sync:', error); return; }
+    SET_LAST_KEY = settingsKey();
+  }catch(e){ console.warn('settings sync:', e); }
+}
+function queueSettingsSync(){
+  if(!cloudReady || !cloudUser || !supabaseClient) return;
+  if(settingsKey() === SET_LAST_KEY) return;
+  clearTimeout(settingsTimer);
+  settingsTimer = setTimeout(settingsSyncNow, 500);
+}
+async function settingsLoad(){
+  if(!supabaseClient || !cloudUser) return;
+  const { data, error } = await supabaseClient.from('s').select('lgcur,arc').eq('u', cloudUser.id).maybeSingle();
+  if(error) throw error;
+  if(data){
+    S.archIds = Array.isArray(data.arc) ? data.arc : [];
+    S.lgCur = data.lgcur || 'toman';
+    SET_LAST_KEY = settingsKey();
+  }else{
+    /* بار اول: تنظیمات همین گوشی به ابر فرستاده می‌شود */
+    await settingsSyncNow();
+  }
+}
 
 async function cloudLoad(){
   if(!supabaseClient || !cloudUser) throw new Error('اتصال حساب ابری برقرار نیست.');
@@ -577,6 +616,7 @@ async function cloudLoad(){
     const _cRank = id => _cOld.has(id) ? _cOld.get(id) : 1e9;
     p.c.sort((a, b) => _cRank(a.id) - _cRank(b.id));
   });
+  try{ await settingsLoad(); }catch(e){ console.warn('settings load:', e); }
   S = { ...S, cur:S.cur || 'toman', parties, ledger, email:cloudUser.email || S.email || '', loggedIn:true };
   try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){}
 }
@@ -660,6 +700,7 @@ const ICON = {
   menu:'<svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>',
   search:'<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
   back:'<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>',
+  arch:'<svg viewBox="0 0 24 24"><path d="M3 4h18v4H3zM5 8v12h14V8M10 12h4"/></svg>',
   chev:'<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>',
   edit:'<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z"/></svg>',
   trash:'<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
@@ -693,6 +734,8 @@ function pcur(p){ return (p && CURS[p.cur]) ? p.cur : 'toman'; }
 function curKey(){ const p = (typeof findParty === 'function') ? findParty(V.openId) : null; return (p && p.cur) || S.cur || 'toman'; }
 function curLabel(){ return CURS[curKey()] || 'تومان'; }
 function money(n){ return num(n) + ' ' + curLabel(); }
+function lgCurKey(){ return (S.lgCur && CURS[S.lgCur]) ? S.lgCur : 'toman'; }
+function lgMoney(n){ return num(n) + ' ' + CURS[lgCurKey()]; }
 function signed(n){ return n > 0 ? '+' + money(n) : n < 0 ? '−' + money(n) : '-'; }
 /* balance colors: positive (customer owes us) red, negative (customer has a claim) green */
 function cls(n){ return n > 0 ? 'neg' : n < 0 ? 'pos' : 'zero'; }
@@ -707,7 +750,8 @@ function tally(balances){
    pos = everything I paid/gave to customers, neg = everything I received from customers, net = pos - neg */
 function tallyC(custs){
   let pos = 0, neg = 0;
-  custs.forEach(c => c.tx.forEach(t => { if(t.a > 0) pos += t.a; else neg += -t.a; }));
+  /* مشتری‌های بایگانی‌شده در مجموع حساب حساب نمی‌شوند */
+  custs.filter(c => !isArch(c)).forEach(c => c.tx.forEach(t => { if(t.a > 0) pos += t.a; else neg += -t.a; }));
   return { pos, neg, net: pos - neg };
 }
 function custStatus(b){
@@ -818,7 +862,7 @@ function load(){
   }));
   return d;
 }
-function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} queueCloudSync(); }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} queueCloudSync(); queueSettingsSync(); }
 const NET_MSG = 'اینترنت قطع است. به اینترنت وصل شوید و دوباره انجام دهید، یا اینترنت خود را بررسی کنید.';
 let toastTimer = null;
 function showToast(message, ok){
@@ -930,6 +974,7 @@ function softTone(f1, f2, dur, wave){
   }catch(e){}
 }
 function playBell(){
+  if(S.snSave === false) return;
   try{
     if(!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
     if(AC.state === 'suspended') AC.resume();
@@ -945,7 +990,7 @@ function playBell(){
     });
   }catch(e){}
 }
-function soundForward(){ softTone(480, 640, 0.22, 'sine'); }
+function soundForward(){ if(S.snd === false) return; softTone(480, 640, 0.22, 'sine'); }
 function soundBack(){ soundForward(); }
 
 function resetToList(){
@@ -999,8 +1044,26 @@ function custMatch(c, q){
 }
 function findParty(id){ return S.parties.find(p => p.id === id); }
 function findCust(pid, cid){ const p = findParty(pid); return p && p.c.find(c => c.id === cid); }
+/* بایگانی: فهرست شناسه مشتری‌های بایگانی‌شده، فقط روی همین گوشی ذخیره می‌شود */
+function isArch(c){ return (S.archIds || []).includes(c.id); }
+function setArchived(id, on){
+  const set = new Set(S.archIds || []);
+  if(on) set.add(id); else set.delete(id);
+  S.archIds = [...set];
+  save();
+}
+function custCardHTML(p, c){
+  const b = custBal(c), col = colorFor(c.n);
+  return `<div class="lp-wrap cust-wrap">
+    <button class="card" data-a="cust" data-p="${p.id}" data-c="${c.id}">
+      ${avHTML(c, col)}
+      <span class="nm"><b>${esc(c.n)}</b><small>${c.ph ? fa(c.ph) : c.tx.length + ' تراکنش'}</small></span>
+      <span class="bal-col"><span class="bal ${balCls(b)}">${b === 0 ? '-' : money(b)}</span>${b === 0 ? '' : `<small class="bal-note">${b > 0 ? 'بدهکار است' : 'طلب دارد'}</small>`}</span>
+    </button>
+    <button class="pmore" data-a="custMore" data-p="${p.id}" data-c="${c.id}" aria-label="گزینه‌ها">⋮</button></div>`;
+}
 function custBal(c){ return c.tx.reduce((s, t) => s + t.a, 0); }
-function allBalances(){ const a = []; S.parties.forEach(p => p.c.forEach(c => a.push(custBal(c)))); return a; }
+function allBalances(){ const a = []; S.parties.forEach(p => p.c.forEach(c => { if(!isArch(c)) a.push(custBal(c)); })); return a; }
 const COLORS = [['#f1e4d3','#7d5a3c'],['#e6efe3','#4d6b3f'],['#efe6e1','#8a4b35'],['#ece6dc','#6b5a3e'],['#f3e8d8','#a0692e']];
 function colorFor(s){ let h = 0; for(const ch of s) h = (h*31 + ch.charCodeAt(0)) >>> 0; return COLORS[h % COLORS.length]; }
 
@@ -1265,10 +1328,10 @@ function render(){
       </header>
       <section class="cb-hero">
         <div class="cb-lbl">${rest < 0 ? 'کسر شما' : 'موجودی شما'}</div>
-        <div class="cb-net ${rest > 0 ? 'cb-pos' : rest < 0 ? 'cb-neg' : ''}">${money(Math.abs(rest))}</div>
+        <div class="cb-net ${rest > 0 ? 'cb-pos' : rest < 0 ? 'cb-neg' : ''}">${lgMoney(Math.abs(rest))}</div>
         <div class="cb-cards">
-          <div class="cb-card"><span>دخل</span><b>${money(inc)}</b></div>
-          <div class="cb-card"><span>خرج</span><b>${money(exp)}</b></div>
+          <div class="cb-card"><span>دخل</span><b>${lgMoney(inc)}</b></div>
+          <div class="cb-card"><span>خرج</span><b>${lgMoney(exp)}</b></div>
         </div>
       </section>
       <div class="lg-bar">
@@ -1285,7 +1348,7 @@ function render(){
       <div class="lg-scroll">${LS.length ? LS.map(x => `
         <div class="lg-row">
           <div class="lg-main">
-            <b class="${x.type === 'in' ? 'cb-in' : 'cb-out'}">${x.type === 'in' ? 'دخل' : 'خرج'} ${money(x.a)}</b>
+            <b class="${x.type === 'in' ? 'cb-in' : 'cb-out'}">${x.type === 'in' ? 'دخل' : 'خرج'} ${lgMoney(x.a)}</b>
             <span${LGEXP.has(String(x.id)) ? ' class="open"' : ''} data-a="lgDescToggle" data-id="${esc(String(x.id))}">${esc(x.d || 'بدون شرح')}</span>
             <small>${jStr(x.y, x.m, x.dd)}${x.hh != null ? ' · ' + clockText(x.hh, x.mm || 0) : ''}</small>
           </div>
@@ -1303,6 +1366,8 @@ function render(){
     m.innerHTML = pageHead('دخل و خرج', 'ledger') + `
       <div class="tx-page">
         <button class="pbtn del cm-btn" data-a="ledgerDelAll">${ICON.trash}<span>حذف همه تراکنش‌ها</span></button>
+        <button class="pbtn lg-cur-open" data-a="lgCurOpen"><span>مبلغ: ${CURS[lgCurKey()]}</span><span>${V.lgOpen ? '▴' : '▾'}</span></button>
+        ${V.lgOpen ? `<div class="lg-cur-list">${Object.keys(CURS).map(k => `<button type="button" class="lg-cur-row ${lgCurKey() === k ? 'on' : ''}" data-a="lgCur" data-v="${k}"><span class="lg-dot">${lgCurKey() === k ? '✓' : ''}</span><span>${CURS[k]}</span></button>`).join('')}</div>` : ''}
       </div>`;
     return;
   }
@@ -1316,6 +1381,8 @@ function render(){
         <button class="srow-b" data-a="pinToggle">پین کد امنیتی: ${S.pin ? 'فعال' : 'غیرفعال'}</button>
         ${S.pin ? '<button class="srow-b" data-a="pinChange">تغییر پین</button>' : ''}
         <button class="srow-b" onclick="showBackupAsk()">پشتیبان‌گیری</button>
+        <button class="srow-b" data-a="soundToggle">صدای کلیدها: ${S.snd === false ? 'غیرفعال شد' : 'فعال شد'}</button>
+        <button class="srow-b" data-a="saveSoundToggle">صدای ثبت تغییرات: ${S.snSave === false ? 'غیرفعال شد' : 'فعال شد'}</button>
         <button class="srow-b srow-out" data-a="authLogout">خروج از حساب</button>
         <div class="ka-row"><b>آخرین بروزرسانی سرور</b><span class="ka-v" id="ka-v">${kaText()}</span></div>
       </div>
@@ -1355,6 +1422,19 @@ function render(){
     return;
   }
 
+  if(V.view === 'archive'){
+    const p = findParty(V.openId);
+    if(!p){ V.view = 'list'; return render(); }
+    const arc = p.c.filter(c => isArch(c));
+    m.innerHTML = `<header class="top">
+        <button class="ic" data-a="archBack" aria-label="برگشت">${ICON.back}</button>
+        <button class="title-btn" data-a="archBack">بایگانی</button>
+        <span class="sp"></span>
+      </header>
+      <div class="arch-lbl">مشتری‌های بایگانی</div>
+      <div class="list">${arc.length ? arc.map(c => custCardHTML(p, c)).join('') : '<div class="empty">بایگانی خالی است.</div>'}</div>`;
+    return;
+  }
   if(V.view === 'custMenu'){
     const p = findParty(V.openId), c = p && findCust(p.id, V.custId);
     if(!c){ V.view = 'list'; return render(); }
@@ -1368,6 +1448,8 @@ function render(){
         <button class="pbtn cm-btn" data-a="cMenuEdit" ${ids}>${ICON.edit}<span>ویرایش</span></button>
         <button class="pbtn del cm-btn" data-a="cDelTx" ${ids}>${ICON.trash}<span>حذف همه تراکنش‌ها</span></button>
         <button class="pbtn del cm-btn" data-a="cDel" ${ids}>${ICON.trash}<span>حذف مشتری</span></button>
+        ${isArch(c) ? '' : `<button class="pbtn cm-btn" data-a="cArch" ${ids}>${ICON.arch}<span>انتقال به بایگانی</span></button>`}
+        ${isArch(c) ? `<button class="pbtn cm-btn" data-a="cUnarch" ${ids}>${ICON.arch}<span>خارج از بایگانی</span></button>` : ''}
       </div>`;
     return;
   }
@@ -2009,7 +2091,7 @@ function partySection(p){
   const key = `party:${p.id}`;
   const on = LPSEL && LPSEL.key === key;
   const q = V.q.trim();
-  const custs = p.c.filter(c => custMatch(c, q));
+  const custs = p.c.filter(c => !isArch(c) && custMatch(c, q));
   return `
     <div class="lp-wrap ${on ? 'on' : ''}">
       <section class="hero" data-lp="${key}">
@@ -2044,7 +2126,7 @@ function partySection(p){
               <button class="pbtn del" data-a="cDel" ${ids}>${ICON.trash}<span>حذف مشتری</span></button>
             </div>`
           : `<button class="pmore" data-a="custMore" ${ids} aria-label="گزینه‌ها">⋮</button>`}</div>`;
-      }).join('') : `<div class="empty">${p.c.length ? 'مشتری‌ای با این نام یا شماره پیدا نشد.' : 'هنوز مشتری‌ای برای این طرف حساب ثبت نشده.<br>با دکمه پایین صفحه، اولین مشتری را اضافه کنید.'}</div>`}
+      }).join('') : `<div class="empty">${p.c.length ? (p.c.some(c => !isArch(c)) ? 'مشتری‌ای با این نام یا شماره پیدا نشد.' : 'همه مشتری‌ها بایگانی شده‌اند. برای دیدن‌شان روی «بایگانی» بزنید.') : 'هنوز مشتری‌ای برای این طرف حساب ثبت نشده.<br>با دکمه پایین صفحه، اولین مشتری را اضافه کنید.'}</div>`}
     </div>`;
 }
 function renderMain(m){
@@ -2055,7 +2137,7 @@ function renderMain(m){
     <header class="top">
       <button class="ic" data-a="menu" aria-label="منو">${ICON.menu}</button>
       <button class="title-btn" data-a="togglePick">${esc(title)} <span class="caret">${V.pick ? '▴' : '▾'}</span></button>
-      <span class="sp"></span>
+      ${p ? `<button class="arch-hd" data-a="archOpen" data-p="${p.id}">بایگانی</button>` : '<span class="sp"></span>'}
     </header>
     ${(V.pick || !p) ? pickRow(p) : ''}
     ${V.search ? `<div class="search"><input id="q" type="search" placeholder="جستجوی مشتری..." value="${esc(V.q)}"></div>` : ''}
@@ -2603,6 +2685,11 @@ const SHEETS = {
       <input id="del-name" data-exp="${esc(want)}" autocomplete="off">
       <button class="btn danger" id="del-ok" disabled data-a="doDel" data-act="${act}" data-p="${p ? p.id : ''}" data-c="${c ? c.id : ''}" data-t="${t ? esc(t.id) : ''}">${label}</button>`;
   },
+  archConfirm(p, c, toArch){
+    return sheetHead(toArch ? 'انتقال به بایگانی' : 'خارج از بایگانی') + `
+      <p class="hint">${toArch ? `مشتری <b>${esc(c.n)}</b> به بایگانی انتقال می‌شود.` : `مشتری <b>${esc(c.n)}</b> به صفحه مشتریان برمی‌گردد.`}</p>
+      <button class="btn pri-btn" data-a="doArch" data-p="${p.id}" data-c="${c.id}" data-v="${toArch ? 1 : 0}">${toArch ? 'انتقال شود به بایگانی' : 'تأیید، برگردد به مشتریان'}</button>`;
+  },
   partyAdd(){
     return sheetHead('افزودن طرف حساب') + `
       <label for="f-name">نام طرف حساب</label>
@@ -2901,7 +2988,7 @@ function lgInvHTML(rows){
     td.num{direction:ltr;white-space:nowrap}
     .foot{margin-top:28px;border-top:1px solid #ddd;padding-top:10px;text-align:right;color:#555;font-size:12px;line-height:1.9}
     .foot b{color:#222;font-size:13px;direction:ltr;display:inline-block}
-  </style></head><body>
+</style></head><body>
   <div class="name">عنوان: <b>صورت دخل و خرج</b></div>
   <div class="sum">
     <div><span>مجموع دخل</span><b style="color:#1e7a4c">${money(s.inc)}</b></div>
@@ -4171,6 +4258,20 @@ document.addEventListener('click', async e => {
       }
       break;
     }
+    case 'cArch': openSheet(SHEETS.archConfirm(p, c, true)); break;
+    case 'cUnarch': openSheet(SHEETS.archConfirm(p, c, false)); break;
+    case 'doArch': setArchived(c.id, el.dataset.v === '1'); playBell(); closeSheet(); goTo({view:'list', openId:p.id}, true); break;
+    case 'archOpen': goTo({view:'archive', openId:p.id}); break;
+    case 'archBack': history.back(); break;
+    case 'saveSoundToggle': {
+      const wasOn = S.snSave !== false;
+      S.snSave = !wasOn;
+      if(wasOn) S.snd = false;
+      save(); if(!wasOn) playBell(); render(); break;
+    }
+    case 'soundToggle': S.snd = S.snd === false; save(); if(S.snd) playBell(); render(); break;
+    case 'lgCurOpen': V.lgOpen = !V.lgOpen; render(); break;
+    case 'lgCur': S.lgCur = el.dataset.v; V.lgOpen = false; save(); playBell(); render(); break;
     case 'cDelTx':
       LPSEL = null; render(); openSheet(SHEETS.confirmDel('txs', c.n, p, c)); break;
     case 'cDel':
@@ -4413,6 +4514,7 @@ function startLive(){
       .on('postgres_changes', sub('l'), liveKick)
       .on('postgres_changes', sub('nb'), liveKick)
       .on('postgres_changes', sub('ny'), liveKick)
+      .on('postgres_changes', sub('s'), liveKick)
       .subscribe();
   }catch(e){ console.warn('realtime:', e); }
 }
