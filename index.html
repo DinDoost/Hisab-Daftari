@@ -501,6 +501,8 @@ body:has(#main > .list), body:has(#main > .lg-scroll), body:has(#main > #nbRows)
 #main:has(> .list) .cq-wrap input#cq{border:1.5px solid var(--pri) !important}
 /* خط دور قالب «دخل و خرج شخصی» به رنگ اصلی برنامه */
 #main .opt.ledger-open{border:1.5px solid var(--pri) !important}
+.lg-acts-one{display:flex;gap:10px;margin-top:14px}
+.lg-acts-one button{flex:1}
 .arch-hd{border:1.5px solid var(--pri);background:#fff;color:var(--text);border-radius:16px;padding:8px 16px;line-height:1.3;font-family:inherit;font-weight:700;font-size:15px;cursor:pointer;white-space:nowrap;flex:none}
 .arch-lbl{display:flex;align-items:center;justify-content:center;border:1.5px solid var(--pri);background:#fff;color:var(--text);border-radius:16px;padding:14px 16px;margin:12px 0 6px;font-weight:700;font-size:16px;min-height:54px}
 .lg-cur-list{display:flex;flex-direction:column;gap:10px;margin-top:4px}
@@ -534,7 +536,7 @@ let cloudSyncing = false, cloudSyncAgain = false;
 let ledgerCloudOk = true, ledgerWarned = false, ledgerStrict = false, lastLedgerErr = '';
 
 /* تنظیمات مشترک هر کاربر (بایگانی و واحد دخل و خرج) در جدول s ذخیره می‌شود تا روی همه گوشی‌ها یکسان باشد */
-let SET_LAST_KEY = '', settingsTimer = null;
+let SET_LAST_KEY = '', settingsTimer = null, SET_PENDING = false;
 function settingsKey(){ return JSON.stringify([lgCurKey(), S.archIds || []]); }
 async function settingsSyncNow(){
   if(!supabaseClient || !cloudUser) return;
@@ -542,12 +544,13 @@ async function settingsSyncNow(){
     const row = { u: cloudUser.id, lgcur: lgCurKey(), arc: S.archIds || [] };
     const { error } = await supabaseClient.from('s').upsert(row, { onConflict:'u' });
     if(error){ console.warn('settings sync:', error); return; }
-    SET_LAST_KEY = settingsKey();
+    SET_LAST_KEY = settingsKey(); SET_PENDING = false;
   }catch(e){ console.warn('settings sync:', e); }
 }
 function queueSettingsSync(){
   if(!cloudReady || !cloudUser || !supabaseClient) return;
   if(settingsKey() === SET_LAST_KEY) return;
+  SET_PENDING = true;
   clearTimeout(settingsTimer);
   settingsTimer = setTimeout(settingsSyncNow, 500);
 }
@@ -555,15 +558,31 @@ async function settingsLoad(){
   if(!supabaseClient || !cloudUser) return;
   const { data, error } = await supabaseClient.from('s').select('lgcur,arc').eq('u', cloudUser.id).maybeSingle();
   if(error) throw error;
-  if(data){
+  if(data && !SET_PENDING){
     S.archIds = Array.isArray(data.arc) ? data.arc : [];
     S.lgCur = data.lgcur || 'toman';
     SET_LAST_KEY = settingsKey();
+    try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){}
   }else{
     /* بار اول: تنظیمات همین گوشی به ابر فرستاده می‌شود */
     await settingsSyncNow();
   }
 }
+
+/* هر چند ثانیه تنظیمات بایگانی و واحد مبلغ را از سرور می‌گیرد؛ تغییر گوشی دیگر فوراً روی این گوشی دیده می‌شود */
+async function settingsPoll(){
+  if(!cloudUser || !supabaseClient || !cloudReady || !navigator.onLine || LK.locked) return;
+  try{
+    if(settingsKey() !== SET_LAST_KEY) SET_PENDING = true;
+    if(SET_PENDING){ await settingsSyncNow(); return; }
+    const before = settingsKey();
+    await settingsLoad();
+    if(settingsKey() !== before && !liveUIBusy()) render();
+  }catch(e){ console.warn('settings poll:', e); }
+}
+setInterval(settingsPoll, 4000);
+document.addEventListener('visibilitychange', () => { if(!document.hidden) settingsPoll(); });
+window.addEventListener('online', () => setTimeout(settingsPoll, 800));
 
 async function cloudLoad(){
   if(!supabaseClient || !cloudUser) throw new Error('اتصال حساب ابری برقرار نیست.');
@@ -1362,6 +1381,29 @@ function render(){
     return;
   }
 
+  if(V.view === 'ledgerOne'){
+    const x = (S.ledger || []).find(r => r.id === V.txId);
+    if(!x){ V.view = 'ledger'; return render(); }
+    m.innerHTML = `<header class="top">
+        <button class="ic" data-a="archBack" aria-label="برگشت">${ICON.back}</button>
+        <h1>تراکنش</h1>
+        <span class="sp"></span>
+      </header>
+      <div class="lg-scroll">
+        <div class="lg-row">
+          <div class="lg-main">
+            <b class="${x.type === 'in' ? 'cb-in' : 'cb-out'}">${x.type === 'in' ? 'دخل' : 'خرج'} ${lgMoney(x.a)}</b>
+            <span class="open">${esc(x.d || 'بدون شرح')}</span>
+            <small>${jStr(x.y, x.m, x.dd)}${x.hh != null ? ' · ' + clockText(x.hh, x.mm || 0) : ''}</small>
+          </div>
+        </div>
+        <div class="lg-acts lg-acts-one">
+          <button data-a="ledgerEdit" data-id="${esc(x.id)}">ویرایش</button>
+          <button class="del" data-a="ledgerDel" data-id="${esc(x.id)}">حذف</button>
+        </div>
+      </div>`;
+    return;
+  }
   if(V.view === 'ledgerMenu'){
     m.innerHTML = pageHead('دخل و خرج', 'ledger') + `
       <div class="tx-page">
@@ -3743,13 +3785,7 @@ document.addEventListener('click', async e => {
       LG = ledgerFresh();
       closeSheet(); render(); break;
     }
-    case 'ledgerMore': {
-      if(LG.sel === el.dataset.id){ endSel(); break; }
-      const had = !!LG.sel;
-      ledgerCapture(); LG.sel = el.dataset.id;
-      if(!had) pushOv('lgsel');
-      render(); break;
-    }
+    case 'ledgerMore': goTo({view:'ledgerOne', txId: el.dataset.id}); break;
     case 'ledgerEdit': {
       const x = (S.ledger || []).find(r => r.id === el.dataset.id);
       if(!x) break;
