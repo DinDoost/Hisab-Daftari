@@ -479,7 +479,7 @@ body:has(#main > .list), body:has(#main > .lg-scroll), body:has(#main > #nbRows)
 #main:has(> .list) .cust-wrap .card .nm b{font-size:13px !important;max-width:100%}
 #main:has(> .list) .cust-wrap .card .nm small{font-size:11px !important}
 #main:has(> .list) .cust-wrap .card .bal{font-size:12px !important}
-#main:has(> .list) .cust-wrap .card .bal-note{font-size:10px !important}
+#main:has(> .list) .cust-wrap .card .bal-note{font-size:11px !important;font-weight:700 !important;color:#1e293b !important}
 #main:has(> .list) .cust-wrap .card{gap:8px}
 
 /* قالب «دخل و خرج شخصی»: بدون خط اطراف، رنگ یکدست با برنامه، متن درشت‌تر و فلش بزرگ‌تر */
@@ -569,7 +569,7 @@ async function settingsLoad(){
   }
 }
 
-/* هر چند ثانیه تنظیمات بایگانی و واحد مبلغ را از سرور می‌گیرد؛ تغییر گوشی دیگر فوراً روی این گوشی دیده می‌شود */
+/* تنظیمات بایگانی و واحد مبلغ را از سرور می‌گیرد؛ وقتی برنامه دوباره فعال یا آنلاین شود و در حالت عادی با اتصال زنده به‌روز می‌شود */
 async function settingsPoll(){
   if(!cloudUser || !supabaseClient || !cloudReady || !navigator.onLine || LK.locked) return;
   try{
@@ -580,7 +580,6 @@ async function settingsPoll(){
     if(settingsKey() !== before && !liveUIBusy()) render();
   }catch(e){ console.warn('settings poll:', e); }
 }
-setInterval(settingsPoll, 4000);
 document.addEventListener('visibilitychange', () => { if(!document.hidden) settingsPoll(); });
 window.addEventListener('online', () => setTimeout(settingsPoll, 800));
 
