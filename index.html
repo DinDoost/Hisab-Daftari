@@ -636,6 +636,7 @@ async function cloudLoad(){
   });
   try{ await settingsLoad(); }catch(e){ console.warn('settings load:', e); }
   S = { ...S, cur:S.cur || 'toman', parties, ledger, email:cloudUser.email || S.email || '', loggedIn:true };
+  prefApplyOrder();
   try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){}
 }
 
@@ -1308,32 +1309,59 @@ document.addEventListener('input', e => {
   if(box && b) box.innerHTML = nbRowsHTML(b);
 });
 
-/* ---------- آخرین طرف حساب / بایگانی / دفترچه‌ای که باز کرده‌اید، تا وقتی خودتان عوضش نکنید همان می‌ماند ---------- */
-const PREF_KEY = 'hesab-pref-v1';
-let PREF_DONE = false, PREF_LAST = '';
-function prefGet(){ try{ return JSON.parse(localStorage.getItem(PREF_KEY) || 'null'); }catch(e){ return null; } }
-function prefWriteLocal(p){ try{ localStorage.setItem(PREF_KEY, JSON.stringify(p)); }catch(e){} }
-function prefLocalMatch(){
-  const p = prefGet();
-  return (p && cloudUser && p.uid === cloudUser.id && p.kind && p.id) ? p : null;
+/* ---------- تنظیمات شخصی هر کاربر: آخرین مورد باز شده + ترتیب طرف حساب‌ها و مشتری‌ها؛ روی همه دستگاه‌ها یکسان ---------- */
+const PREF_KEY = 'hesab-pref-v2';
+let PREF_DONE = false, PREF_LAST = '', PREF_WAIT = true;
+setTimeout(() => { PREF_WAIT = false; try{ render(); }catch(e){} }, 6000);
+function prefGet(){
+  try{ const d = JSON.parse(localStorage.getItem(PREF_KEY) || 'null'); return d && typeof d === 'object' ? d : null; }catch(e){ return null; }
 }
-async function prefSyncNow(p){
+function prefWriteLocal(d){ try{ localStorage.setItem(PREF_KEY, JSON.stringify(d)); }catch(e){} }
+function prefCur(){
+  const d = prefGet();
+  if(cloudUser && d && d.uid === cloudUser.id) return d;
+  return { uid: cloudUser ? cloudUser.id : null, last: null, ord: null };
+}
+async function prefSyncNow(d){
   if(!supabaseClient || !cloudUser || !navigator.onLine) return;
   try{
-    const { error } = await supabaseClient.from('pref').upsert({ u: cloudUser.id, d: p }, { onConflict:'u' });
+    const { error } = await supabaseClient.from('pref').upsert({ u: cloudUser.id, d }, { onConflict:'u' });
     if(error) console.warn('pref sync:', error);
   }catch(e){ console.warn('pref sync:', e); }
 }
+function prefSave(d){ prefWriteLocal(d); prefSyncNow(d); }
+/* هر بخش (آخرین مورد باز شده، ترتیب) جداگانه با تاریخ خودش ذخیره می‌شود؛ هرکدام تازه‌تر باشد برنده است */
 async function prefLoadCloud(){
   if(!supabaseClient || !cloudUser) return;
   try{
     const { data, error } = await supabaseClient.from('pref').select('d').eq('u', cloudUser.id).maybeSingle();
-    if(error || !data || !data.d) return;
-    const cloud = data.d, local = prefGet();
-    if(cloud.uid === cloudUser.id && (!local || (Number(cloud.t) || 0) > (Number(local.t) || 0))){
-      prefWriteLocal(cloud); PREF_DONE = false;
-    }
+    if(error) return;
+    const cloud = (data && data.d && data.d.uid === cloudUser.id) ? data.d : { uid: cloudUser.id, last: null, ord: null };
+    const local = prefCur();
+    const pick = (a, b) => (!a ? (b || null) : !b ? a : ((Number(b.t) || 0) > (Number(a.t) || 0) ? b : a));
+    const merged = { uid: cloudUser.id, last: pick(local.last, cloud.last), ord: pick(local.ord, cloud.ord) };
+    prefWriteLocal(merged);
+    if(JSON.stringify(merged) !== JSON.stringify(cloud)) prefSyncNow(merged);
+    prefApplyOrder();
   }catch(e){ console.warn('pref load:', e); }
+}
+/* ترتیب ذخیره‌شده را روی طرف حساب‌ها و مشتری‌ها اعمال می‌کند؛ مواردی که ترتیب ندارند (تازه‌ها) آخر فهرست می‌مانند */
+function prefApplyOrder(){
+  const o = prefCur().ord;
+  if(!o || !Array.isArray(S.parties)) return;
+  const pi = new Map((o.p || []).map((id, i) => [id, i]));
+  S.parties.sort((a, b) => (pi.has(a.id) ? pi.get(a.id) : 1e9) - (pi.has(b.id) ? pi.get(b.id) : 1e9));
+  S.parties.forEach(p => {
+    const ci = new Map(((o.c && o.c[p.id]) || []).map((id, i) => [id, i]));
+    p.c.sort((a, b) => (ci.has(a.id) ? ci.get(a.id) : 1e9) - (ci.has(b.id) ? ci.get(b.id) : 1e9));
+  });
+}
+function prefSaveOrder(){
+  if(!cloudUser) return;
+  const d = prefCur();
+  d.uid = cloudUser.id;
+  d.ord = { p: S.parties.map(p => p.id), c: Object.fromEntries(S.parties.map(p => [p.id, p.c.map(c => c.id)])), t: Date.now() };
+  prefSave(d);
 }
 function prefTarget(){
   if(!cloudUser) return null;
@@ -1347,17 +1375,16 @@ function prefTrack(){
   const key = t.kind + ':' + t.id;
   if(key === PREF_LAST) return;
   PREF_LAST = key;
-  const p = { uid: cloudUser.id, kind: t.kind, id: t.id, t: Date.now() };
-  prefWriteLocal(p); prefSyncNow(p);
+  const d = prefCur();
+  d.uid = cloudUser.id;
+  d.last = { kind:t.kind, id:t.id, t: Date.now() };
+  prefSave(d);
 }
-/* تا وقتی ابر خوانده نشده، از روی نسخه محلی باز نمی‌کنیم؛ وگرنه انتخاب جدیدتری که روی گوشی دیگر ثبت شده نادیده گرفته می‌شود */
-let PREF_WAIT = true;
-setTimeout(() => { PREF_WAIT = false; try{ render(); }catch(e){} }, 6000);
 function prefRestore(){
   if(PREF_DONE || !cloudUser || LK.locked) return;
   if(V.view !== 'list' || V.openId){ PREF_DONE = true; return; }
   if(PREF_WAIT && !cloudReady && navigator.onLine) return;
-  const p = prefLocalMatch();
+  const p = prefCur().last;
   if(p){
     let V2 = null;
     if((p.kind === 'party' || p.kind === 'arc') && findParty(p.id)){
@@ -1372,9 +1399,9 @@ function prefRestore(){
       return;
     }
   }
-  /* اگر ابر هم خوانده شده یا اینترنت نیست، دیگر چیزی برای بازگردانی نیست */
   if(cloudReady || !navigator.onLine) PREF_DONE = true;
 }
+
 
 function render(){
   const m = document.getElementById('main');
@@ -2869,7 +2896,7 @@ const SHEETS = {
 /* Hold for one second: the card starts shaking after a short moment,
    and at one second the edit/delete buttons appear. Lifting the finger
    or moving it early cancels the hold. */
-let LPEL = null, LPS = null;
+let LPEL = null, LPS = null, LPY = 0;
 function lpStart(e){
   LPJUST = false;
   clearTimeout(LPT); clearTimeout(LPS);
@@ -2877,13 +2904,14 @@ function lpStart(e){
   const el = e.target && e.target.closest ? e.target.closest('[data-lp]') : null;
   if(!el) return;
   LPEL = el;
+  LPY = (e.touches && e.touches[0]) ? e.touches[0].clientY : e.clientY;
   LPS = setTimeout(() => el.classList.add('shaking'), 350);
   LPT = setTimeout(() => {
     const key = el.dataset.lp;
     const [kind, pid, cid, tid] = key.split(':');
-    LPSEL = { key, view: V.view, kind, pid, cid, tid };
     LPJUST = true;
     LPEL = null;
+    LPSEL = { key, view: V.view, kind, pid, cid, tid };
     render();
     if(navigator.vibrate) navigator.vibrate(20);
   }, el.dataset.hold ? parseInt(el.dataset.hold, 10) : 1000);
@@ -4631,6 +4659,7 @@ function startLive(){
       .on('postgres_changes', sub('nb'), liveKick)
       .on('postgres_changes', sub('ny'), liveKick)
       .on('postgres_changes', sub('s'), liveKick)
+      .on('postgres_changes', sub('pref'), liveKick)
       .subscribe();
   }catch(e){ console.warn('realtime:', e); }
 }
@@ -4653,6 +4682,7 @@ async function liveRefresh(){
   try{
     await cloudLoad();
     await nbLoad();
+    await prefLoadCloud();
     if(!LK.locked) render();
   }catch(e){ console.warn('live refresh:', e); }
 }
