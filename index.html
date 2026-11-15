@@ -636,7 +636,6 @@ async function cloudLoad(){
   });
   try{ await settingsLoad(); }catch(e){ console.warn('settings load:', e); }
   S = { ...S, cur:S.cur || 'toman', parties, ledger, email:cloudUser.email || S.email || '', loggedIn:true };
-  prefApplyOrder();
   try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){}
 }
 
@@ -1312,7 +1311,7 @@ document.addEventListener('input', e => {
 /* ---------- تنظیمات شخصی هر کاربر: آخرین مورد باز شده + ترتیب طرف حساب‌ها و مشتری‌ها؛ روی همه دستگاه‌ها یکسان ---------- */
 const PREF_KEY = 'hesab-pref-v2';
 let PREF_DONE = false, PREF_LAST = '', PREF_WAIT = true;
-setTimeout(() => { PREF_WAIT = false; try{ render(); }catch(e){} }, 6000);
+setTimeout(() => { PREF_WAIT = false; if(!liveUIBusy()) render(); }, 6000);
 function prefGet(){
   try{ const d = JSON.parse(localStorage.getItem(PREF_KEY) || 'null'); return d && typeof d === 'object' ? d : null; }catch(e){ return null; }
 }
@@ -1342,7 +1341,8 @@ async function prefLoadCloud(){
     const merged = { uid: cloudUser.id, last: pick(local.last, cloud.last), ord: pick(local.ord, cloud.ord) };
     prefWriteLocal(merged);
     if(JSON.stringify(merged) !== JSON.stringify(cloud)) prefSyncNow(merged);
-    prefApplyOrder();
+    /* ترتیب را فقط وقتی تازه‌تر از نسخهٔ این گوشی است اعمال می‌کنیم، نه در هر به‌روزرسانی */
+    if(JSON.stringify(merged.ord) !== JSON.stringify(local.ord)) prefApplyOrder();
   }catch(e){ console.warn('pref load:', e); }
 }
 /* ترتیب ذخیره‌شده را روی طرف حساب‌ها و مشتری‌ها اعمال می‌کند؛ مواردی که ترتیب ندارند (تازه‌ها) آخر فهرست می‌مانند */
@@ -1403,7 +1403,33 @@ function prefRestore(){
 }
 
 
+
+/* هر بازسازی صفحه، محل اسکرول را نگه می‌دارد تا لیست بعد از تازه‌سازی به پایین نپرد */
 function render(){
+  /* لیست مشتری‌ها داخل خودش اسکرول می‌شود، پس جای اسکرول خود لیست را نگه می‌داریم */
+  const SEL = '#main > .list, #main > .lg-scroll, #main > #nbRows';
+  const sc = document.querySelector(SEL);
+  const top = sc ? sc.scrollTop : 0;
+  const key = V.view + '|' + (V.openId || '');
+  const y = window.scrollY;
+  /* اگر کادری در حال نوشتن باز است، متن و محل نوشتن آن را بعد از بازسازی برمی‌گردانیم تا کیبورد بیرون نرود */
+  const ae = document.activeElement;
+  const fid = (ae && ae.id && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) ? ae.id : null;
+  const fval = fid ? ae.value : null;
+  const fpos = fid && ae.selectionStart != null ? ae.selectionStart : null;
+  renderNow();
+  if(Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
+  const sc2 = document.querySelector(SEL);
+  if(sc && sc2 && key === V.view + '|' + (V.openId || '')) sc2.scrollTop = top;
+  if(fid){
+    const n = document.getElementById(fid);
+    if(n){
+      if(fval != null && n.value !== fval) n.value = fval;
+      try{ n.focus({ preventScroll:true }); if(fpos != null) n.setSelectionRange(fpos, fpos); }catch(e){}
+    }
+  }
+}
+function renderNow(){
   const m = document.getElementById('main');
   if(V.view === 'detail') V.view = 'list';
   prefRestore();
@@ -4637,7 +4663,7 @@ async function refreshCloudQuiet(){
   try{ await nbLoad(); }catch(e){ console.warn('notebooks load:', e); }
   await prefLoadCloud();
   cloudReady = true; S.loggedIn = true;
-  render();
+  if(!liveUIBusy()) render();
   startLive();
 }
 
@@ -4673,8 +4699,13 @@ function liveUIBusy(){
   const ae = document.activeElement;
   return !!ov || (pt && !pt.classList.contains('hidden')) || (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName));
 }
+/* وقتی انگشت روی صفحه است یا تازه برداشته شده، تازه‌سازی پس‌زمینه صبر می‌کند تا لیست زیر انگشت شما جابه‌جا نشود */
+let TOUCHING = false, TOUCH_T = 0;
+document.addEventListener('touchstart', () => { TOUCHING = true; }, { passive:true });
+['touchend','touchcancel'].forEach(ev => document.addEventListener(ev, () => { TOUCHING = false; TOUCH_T = Date.now(); }, { passive:true }));
 async function liveRefresh(){
   if(!cloudUser || !supabaseClient || !navigator.onLine) return;
+  if(TOUCHING || Date.now() - TOUCH_T < 1500){ clearTimeout(LIVE_T); LIVE_T = setTimeout(liveRefresh, 1600); return; }
   /* اگر همین گوشی در حال ثبت است، کمی صبر می‌کنیم تا تغییر خودش گم نشود */
   if(WRITING || cloudSyncing || NBLOADING){ clearTimeout(LIVE_T); LIVE_T = setTimeout(liveRefresh, 1200); return; }
   /* وسط نوشتن در فرم یا باز بودن پنجره، صفحه را دست نمی‌زنیم */
