@@ -2392,7 +2392,8 @@ async function lkOk(){
   if(LK.mode === 'unlock'){
     if(LK.buf === S.pin){
       if(cloudUser){ lkUnlock(); refreshCloudQuiet(); return; }
-      if(S.loggedIn && (!supabaseClient || !navigator.onLine)){ lkUnlock(); return; }
+      /* اگر قبلاً وارد شده‌اید، با PIN درست همیشه باز شود (حتی اگر نشست ابری با VPN/اینترنت ضعیف خوانده نشد) */
+      if(S.loggedIn && S.email){ lkUnlock(); return; }
       LK.mode = 'login'; LK.f.mail = ''; LK.f.pass = ''; LK.buf = '';
       LK.err = 'نشست حساب ابری پایان یافته است. با ایمیل و رمز حساب وارد شوید.';
       renderLock(); return;
