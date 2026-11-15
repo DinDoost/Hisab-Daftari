@@ -1308,9 +1308,75 @@ document.addEventListener('input', e => {
   if(box && b) box.innerHTML = nbRowsHTML(b);
 });
 
+/* ---------- آخرین طرف حساب / بایگانی / دفترچه‌ای که باز کرده‌اید، تا وقتی خودتان عوضش نکنید همان می‌ماند ---------- */
+const PREF_KEY = 'hesab-pref-v1';
+let PREF_DONE = false, PREF_LAST = '';
+function prefGet(){ try{ return JSON.parse(localStorage.getItem(PREF_KEY) || 'null'); }catch(e){ return null; } }
+function prefWriteLocal(p){ try{ localStorage.setItem(PREF_KEY, JSON.stringify(p)); }catch(e){} }
+function prefLocalMatch(){
+  const p = prefGet();
+  return (p && cloudUser && p.uid === cloudUser.id && p.kind && p.id) ? p : null;
+}
+async function prefSyncNow(p){
+  if(!supabaseClient || !cloudUser || !navigator.onLine) return;
+  try{
+    const { error } = await supabaseClient.from('pref').upsert({ u: cloudUser.id, d: p }, { onConflict:'u' });
+    if(error) console.warn('pref sync:', error);
+  }catch(e){ console.warn('pref sync:', e); }
+}
+async function prefLoadCloud(){
+  if(!supabaseClient || !cloudUser) return;
+  try{
+    const { data, error } = await supabaseClient.from('pref').select('d').eq('u', cloudUser.id).maybeSingle();
+    if(error || !data || !data.d) return;
+    const cloud = data.d, local = prefGet();
+    if(cloud.uid === cloudUser.id && (!local || (Number(cloud.t) || 0) > (Number(local.t) || 0))){
+      prefWriteLocal(cloud); PREF_DONE = false;
+    }
+  }catch(e){ console.warn('pref load:', e); }
+}
+function prefTarget(){
+  if(!cloudUser) return null;
+  if(V.view === 'nbook' && V.openId && NB.some(x => x.id === V.openId)) return { kind:'nb', id:V.openId };
+  if(V.view === 'archive' && V.openId && findParty(V.openId)) return { kind:'arc', id:V.openId };
+  if(V.view === 'list' && V.openId && findParty(V.openId)) return { kind:'party', id:V.openId };
+  return null;
+}
+function prefTrack(){
+  const t = prefTarget(); if(!t) return;
+  const key = t.kind + ':' + t.id;
+  if(key === PREF_LAST) return;
+  PREF_LAST = key;
+  const p = { uid: cloudUser.id, kind: t.kind, id: t.id, t: Date.now() };
+  prefWriteLocal(p); prefSyncNow(p);
+}
+function prefRestore(){
+  if(PREF_DONE || !cloudUser || LK.locked) return;
+  if(V.view !== 'list' || V.openId){ PREF_DONE = true; return; }
+  const p = prefLocalMatch();
+  if(p){
+    let V2 = null;
+    if((p.kind === 'party' || p.kind === 'arc') && findParty(p.id)){
+      V2 = { view: p.kind === 'arc' ? 'archive' : 'list', openId: p.id, custId: null, search: false, q: '' };
+    } else if(p.kind === 'nb' && NB.some(x => x.id === p.id)){
+      V2 = { view: 'nbook', openId: p.id, custId: null, search: false, q: '' };
+      NBCUR = p.id;
+    }
+    if(V2){
+      V = V2; PREF_DONE = true; PREF_LAST = p.kind + ':' + p.id;
+      try{ history.replaceState({v: Object.assign({}, V)}, ''); }catch(e){}
+      return;
+    }
+  }
+  /* اگر ابر هم خوانده شده یا اینترنت نیست، دیگر چیزی برای بازگردانی نیست */
+  if(cloudReady || !navigator.onLine) PREF_DONE = true;
+}
+
 function render(){
   const m = document.getElementById('main');
   if(V.view === 'detail') V.view = 'list';
+  prefRestore();
+  prefTrack();
   if(LPSEL && LPSEL.view !== V.view) LPSEL = null;
   if(V.view === 'nbList' || V.view === 'nbook'){ renderNotebooks(m); return; }
 
@@ -4525,6 +4591,7 @@ async function refreshCloudQuiet(){
   try{
     await cloudLoad();
     await nbLoad();
+    await prefLoadCloud();
     cloudReady = true; S.loggedIn = true;
     render();
     startLive();
