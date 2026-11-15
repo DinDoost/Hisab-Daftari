@@ -1350,9 +1350,13 @@ function prefTrack(){
   const p = { uid: cloudUser.id, kind: t.kind, id: t.id, t: Date.now() };
   prefWriteLocal(p); prefSyncNow(p);
 }
+/* تا وقتی ابر خوانده نشده، از روی نسخه محلی باز نمی‌کنیم؛ وگرنه انتخاب جدیدتری که روی گوشی دیگر ثبت شده نادیده گرفته می‌شود */
+let PREF_WAIT = true;
+setTimeout(() => { PREF_WAIT = false; try{ render(); }catch(e){} }, 6000);
 function prefRestore(){
   if(PREF_DONE || !cloudUser || LK.locked) return;
   if(V.view !== 'list' || V.openId){ PREF_DONE = true; return; }
+  if(PREF_WAIT && !cloudReady && navigator.onLine) return;
   const p = prefLocalMatch();
   if(p){
     let V2 = null;
@@ -4586,18 +4590,27 @@ function storedSessionUser(){
   }catch(e){}
   return null;
 }
+let CLOUD_TRIES = 0;
 async function refreshCloudQuiet(){
   if(!cloudUser || cloudReady) return;
+  /* دفترچه‌ها و تنظیم پیش‌فرض جدا از بارگذاری طرف حساب‌ها خوانده می‌شوند تا خطای یکی، بقیه را متوقف نکند */
+  let ok = false;
   try{
     await cloudLoad();
-    await nbLoad();
-    await prefLoadCloud();
-    cloudReady = true; S.loggedIn = true;
-    render();
-    startLive();
+    ok = true;
   }catch(e){
     console.warn('cloud refresh skipped (offline?):', e);
   }
+  if(!ok){
+    /* اگر بارگذاری ناموفق بود، چند بار دیگر امتحان می‌کنیم؛ چیزی را به‌عنوان «همگام‌شده» علامت نمی‌زنیم */
+    if(CLOUD_TRIES++ < 6 && cloudUser) setTimeout(refreshCloudQuiet, 3000);
+    return;
+  }
+  try{ await nbLoad(); }catch(e){ console.warn('notebooks load:', e); }
+  await prefLoadCloud();
+  cloudReady = true; S.loggedIn = true;
+  render();
+  startLive();
 }
 
 /* ---------- همگام‌سازی لحظه‌ای بین گوشی‌ها (Supabase Realtime) ---------- */
