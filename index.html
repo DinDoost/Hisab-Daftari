@@ -1125,8 +1125,8 @@ function nbPersist(){
   try{ localStorage.setItem('hesab-nb-v1', JSON.stringify({ uid, nb: NB, ny: NY })); }catch(e){}
 }
 /* نسخهٔ ذخیره‌شده فقط مربوط به همان حسابی است که آن را نوشته؛ حساب دیگر دفترچه‌های این حساب را نمی‌بیند */
-function nbUseUser(){
-  const uid = cloudUser ? cloudUser.id : null;
+function nbUseUser(uidArg){
+  const uid = uidArg !== undefined ? uidArg : (cloudUser ? cloudUser.id : null);
   if(NBOWNER === uid) return;
   NBOWNER = uid; NB = []; NY = []; NBSYNCED = false; NBCUR = null; NBREADY = false;
   try{
@@ -1137,6 +1137,27 @@ function nbUseUser(){
   try{
     const _nb = JSON.parse(localStorage.getItem('hesab-nb-cur') || 'null');
     if(_nb && _nb.id && NB.some(x => x.id === _nb.id)) NBCUR = _nb.id;
+  }catch(e){}
+}
+/* هیچ درخواست شبکه‌ای نباید برنامه را برای همیشه معطل کند؛ بعد از مهلت، نتیجه را خالی برمی‌گردانیم */
+function withTimeoutSoft(p, ms){
+  return Promise.race([Promise.resolve(p).catch(() => null), new Promise(r => setTimeout(() => r(null), ms))]);
+}
+/* تازه‌سازی نشست در پس‌زمینه: وقتی اینترنت هست، توکن تازه گرفته می‌شود تا برنامه ساعت‌ها آفلاین هم کار کند */
+async function renewSessionQuiet(){
+  if(!supabaseClient || !cloudUser || !navigator.onLine) return;
+  try{ await withTimeoutSoft(supabaseClient.auth.refreshSession(), 8000); }catch(e){}
+}
+window.addEventListener('online', () => setTimeout(renewSessionQuiet, 500));
+document.addEventListener('visibilitychange', () => { if(!document.hidden) renewSessionQuiet(); });
+/* اگر نشست زنده نیست (آفلاین یا توکن منقضی)، دفترچه‌ها از کش همان حساب خوانده شوند */
+function nbFromCache(){
+  if(cloudUser) return;
+  try{
+    const su = storedSessionUser();
+    const c = JSON.parse(localStorage.getItem('hesab-nb-v1') || 'null');
+    const uid = (su && su.id) || (c && c.uid) || null;
+    if(uid) nbUseUser(uid);
   }catch(e){}
 }
 function nbReset(){
@@ -2517,6 +2538,7 @@ async function lkOk(){
   if(LK.buf.length < max){ LK.err = `رمز ${fa(max)} رقمی را کامل کنید.`; renderLock(); return; }
   if(LK.mode === 'unlock'){
     if(LK.buf === S.pin){
+      nbFromCache();
       if(cloudUser){ lkUnlock(); refreshCloudQuiet(); return; }
       /* اگر قبلاً وارد شده‌اید، با PIN درست همیشه باز شود (حتی اگر نشست ابری با VPN/اینترنت ضعیف خوانده نشد) */
       if(S.loggedIn && S.email){ lkUnlock(); return; }
@@ -4762,6 +4784,7 @@ async function liveRefresh(){
 }
 
 async function initCloudSession(){
+  nbFromCache();
   if(!supabaseClient){
     /* کتابخانه ابری در دسترس نیست (مثلاً آفلاین): اگر قبلاً وارد شده‌اید، با PIN و اطلاعات ذخیره‌شده باز شود */
     if(S.loggedIn && S.email){
@@ -4772,7 +4795,8 @@ async function initCloudSession(){
     }
     LK.locked = true; LK.err = 'اتصال Supabase بارگذاری نشد. اینترنت و آدرس پروژه را بررسی کنید.'; renderLock(); return;
   }
-  const { data, error } = await supabaseClient.auth.getSession();
+  const _gs = await withTimeoutSoft(supabaseClient.auth.getSession(), 4000);
+  const data = _gs?.data, error = _gs?.error;
   let sessUser = data?.session?.user || null;
   /* اگر قبلاً وارد شده‌اید و PIN دارید، نشست ذخیره‌شده روی گوشی کافی است (حتی بدون اینترنت) */
   if(!sessUser && S.loggedIn && S.email) sessUser = storedSessionUser();
@@ -4791,6 +4815,7 @@ async function initCloudSession(){
     renderLock(); return;
   }
   cloudUser = sessUser; cloudReady = false;
+  renewSessionQuiet();
   nbUseUser();
   S.loggedIn = true; delete S.passHash; delete S.reg;
   LK.f.mail = S.email || cloudUser.email || '';
