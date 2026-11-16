@@ -915,7 +915,6 @@ async function commitWrite(mutate, okMsg, btn){
     if(!(await cloudCommit())){
       S = JSON.parse(snap);
       showToast('ثبت انجام نشد. اینترنت ضعیف است؛ دوباره تلاش کنید یا اینترنت خود را بررسی کنید.');
-      render();
       return false;
     }
     try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){}
