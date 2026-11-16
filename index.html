@@ -1112,26 +1112,26 @@ function lpWrap(key, card, acts){
 
 /* ---------- دفتر یادداشت‌ها: دفترچه‌ها و یادداشت‌ها ---------- */
 let CQMODE = 'text';
-let NB = [], NY = [], NBLOADED = false, NBLOADING = false, NBTRIED = false;
+let NB = [], NY = [], NBLOADED = false, NBLOADING = false, NBTRIED = false, NBREADY = false;
 let NBFROM = '', NBTO = '', NBQ = '', NBPICK = false, NBCUR = null;
 /* دفترچه‌ی باز را در گوشی نگه می‌داریم تا بعد از بیرون رفتن یا بارگذاری دوباره، همان دفترچه باز بماند */
 let NBEXP = new Set();
 if(window.__rs){ NBCUR = window.__rs.NBCUR || null; NBPICK = !!window.__rs.NBPICK; window.__rs = null; }
 let NBSYNCED = false, NBOWNER = null;
 function nbPersist(){
-  if(!cloudUser) return;
-  try{ localStorage.setItem('hesab-nb-v1', JSON.stringify({ uid: cloudUser.id, nb: NB, ny: NY })); }catch(e){}
+  if(!NBREADY) return;
+  const uid = cloudUser ? cloudUser.id : NBOWNER;
+  try{ localStorage.setItem('hesab-nb-v1', JSON.stringify({ uid, nb: NB, ny: NY })); }catch(e){}
 }
 /* نسخهٔ ذخیره‌شده فقط مربوط به همان حسابی است که آن را نوشته؛ حساب دیگر دفترچه‌های این حساب را نمی‌بیند */
 function nbUseUser(){
   const uid = cloudUser ? cloudUser.id : null;
   if(NBOWNER === uid) return;
-  NBOWNER = uid; NB = []; NY = []; NBSYNCED = false; NBCUR = null;
-  if(!uid) return;
+  NBOWNER = uid; NB = []; NY = []; NBSYNCED = false; NBCUR = null; NBREADY = false;
   try{
     const c = JSON.parse(localStorage.getItem('hesab-nb-v1') || 'null');
-    if(c && c.uid === uid){ NB = Array.isArray(c.nb) ? c.nb : []; NY = Array.isArray(c.ny) ? c.ny : []; }
-    else localStorage.removeItem('hesab-nb-v1');
+    if(c && (c.uid === uid || !uid)){ NB = Array.isArray(c.nb) ? c.nb : []; NY = Array.isArray(c.ny) ? c.ny : []; NBREADY = true; }
+    else if(c && uid && c.uid !== uid){ localStorage.removeItem('hesab-nb-v1'); }
   }catch(e){}
   try{
     const _nb = JSON.parse(localStorage.getItem('hesab-nb-cur') || 'null');
@@ -1139,7 +1139,7 @@ function nbUseUser(){
   }catch(e){}
 }
 function nbReset(){
-  NBOWNER = null; NB = []; NY = []; NBSYNCED = false; NBCUR = null; NBPICK = false;
+  NBOWNER = null; NB = []; NY = []; NBSYNCED = false; NBCUR = null; NBPICK = false; NBREADY = false;
   try{ localStorage.removeItem('hesab-nb-v1'); localStorage.removeItem('hesab-nb-cur'); }catch(e){}
 }
 async function nbLoad(){
@@ -1159,7 +1159,7 @@ async function nbLoad(){
     ok = true;
   }catch(e){ console.warn('notebooks load:', e); NBSYNCED = false; }
   finally{ NBLOADING = false; }
-  if(ok){ nbPersist(); render(); }
+  if(ok){ NBREADY = true; nbPersist(); render(); }
 }
 async function nbSaveRow(table, row){
   if(!supabaseClient || !cloudUser) return false;
@@ -1418,6 +1418,7 @@ function render(){
   const fval = fid ? ae.value : null;
   const fpos = fid && ae.selectionStart != null ? ae.selectionStart : null;
   renderNow();
+  nbPersist();
   if(Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
   const sc2 = document.querySelector(SEL);
   if(sc && sc2 && key === V.view + '|' + (V.openId || '')) sc2.scrollTop = top;
@@ -4057,7 +4058,7 @@ document.addEventListener('click', async e => {
       const ok = await nbSaveRow('nb', row);
       el.classList.remove('busy');
       if(!ok){ showToast('ثبت دفترچه انجام نشد. دوباره تلاش کنید.'); return; }
-      NB.push({ id: row.id, n, ts: row.ts });
+      NB.push({ id: row.id, n, ts: row.ts }); NBREADY = true;
       NBCUR = row.id; NBPICK = false; NBQ = ''; NBFROM = ''; NBTO = '';
       closeSheet();
       goTo({view:'nbook', openId: row.id});
@@ -4110,7 +4111,7 @@ document.addEventListener('click', async e => {
       const ok = await nbDeleteRow('nb', id);
       el.classList.remove('busy');
       if(!ok){ showToast('حذف انجام نشد. دوباره تلاش کنید.'); return; }
-      NB = NB.filter(x => x.id !== id);
+      NB = NB.filter(x => x.id !== id); NBREADY = true;
       NY = NY.filter(x => x.nb !== id);
       if(NBCUR === id) NBCUR = null;
       closeSheet();
@@ -4156,7 +4157,7 @@ document.addEventListener('click', async e => {
       const ok = await nbSaveRow('ny', row);
       el.classList.remove('busy');
       if(!ok){ showToast('ثبت یادداشت انجام نشد. دوباره تلاش کنید.'); return; }
-      NY.push({ id: row.id, nb: bid, r, s, b: bt, dt, ts: row.ts });
+      NY.push({ id: row.id, nb: bid, r, s, b: bt, dt, ts: row.ts }); NBREADY = true;
       closeSheet(); render();
       playBell(); showToast('یادداشت ثبت شد', true);
       break;
@@ -4242,7 +4243,7 @@ document.addEventListener('click', async e => {
       const ok = await nbDeleteRow('ny', id);
       el.classList.remove('busy');
       if(!ok){ showToast('حذف یادداشت انجام نشد.'); return; }
-      NY = NY.filter(x => x.id !== id);
+      NY = NY.filter(x => x.id !== id); NBREADY = true;
       closeSheet(); render(); playBell(); showToast('یادداشت حذف شد', true);
       break;
     }
