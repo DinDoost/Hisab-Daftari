@@ -1624,7 +1624,8 @@ function renderNow(){
     if(!c){ V.view = 'list'; return render(); }
     m.innerHTML = pageHead('ویرایش مشتری', 'custMenu') + `
       <div class="tx-page">
-        ${avatarPickHTML(PHOTO ? PHOTO.url : (c.pf || ''))}
+        ${avatarPickHTML(PHOTO ? PHOTO.url : (PHOTO_DEL ? '' : (c.pf || '')))}
+        ${(PHOTO || (c.pf && !PHOTO_DEL)) ? '<button class="btn" data-a="removePhoto" style="margin:-8px auto 16px;display:block">حذف عکس</button>' : ''}
         <input type="file" id="photo-input" accept="image/*" style="display:none">
         <label for="f-name">نام مشتری</label>
         <input id="f-name" value="${esc(c.n)}" maxlength="60">
@@ -2955,6 +2956,7 @@ document.addEventListener('contextmenu', e => { if(e.target.closest('[data-lp]')
 
 /* ---------- customer photo ---------- */
 let PHOTO = null;          /* pending photo: {blob, url} */
+let PHOTO_DEL = false;     /* the customer's photo is to be removed when saved */
 let CROP = null;           /* crop state while the crop sheet is open */
 const CROP_S = 260;        /* crop square size in px */
 const AVATAR_MAX = 5 * 1024;
@@ -3619,7 +3621,7 @@ function renderPortal(){
     el.innerHTML = `
       <div class="pt-wrap">
         <div class="pt-top"><span class="sp"></span><h1>حساب مشتری</h1><button class="ic" data-a="portalClose" aria-label="بستن">${ICON.close}</button></div>
-        <p class="hint">شماره موبایل و کد ۴ رقمی حساب خود را وارد کنید.</p>
+        <p class="hint">شماره موبایل و کد ۶ رقمی حساب خود را وارد کنید.</p>
         <div class="form-card" style="margin-top:12px">
           <div class="fld"><span class="fi">${LOCKSVG}</span><div class="fw"><label for="pt-phone">شماره موبایل</label><input id="pt-phone" type="tel" dir="ltr" inputmode="numeric" pattern="[0-9]*" autocomplete="tel" maxlength="11" oninput="this.value=latin(this.value).replace(/[^0-9]/g,'').slice(0,11)" value="${esc(PORTAL.phone || savedPortalPhone() || '')}"></div></div>
           <div class="fld"><span class="fi">${LOCKSVG}</span><div class="fw"><label for="pt-code">کد ۶ رقمی</label><input id="pt-code" type="tel" dir="ltr" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="6" oninput="this.value=latin(this.value).replace(/[^0-9]/g,'').slice(0,6)" value="${esc(PORTAL.code)}"></div></div>
@@ -4370,15 +4372,21 @@ document.addEventListener('click', async e => {
       if(!CROP) break;
       const blob = await encodeAvatar();
       if(PHOTO && PHOTO.url) URL.revokeObjectURL(PHOTO.url);
-      PHOTO = { blob, url: URL.createObjectURL(blob) };
+      PHOTO = { blob, url: URL.createObjectURL(blob) }; PHOTO_DEL = false;
       CROP = null;
       closeSheet();
       const b = document.querySelector('.avatar-btn');
       if(b) b.outerHTML = avatarPickHTML(PHOTO.url);
       break;
     }
+    case 'removePhoto':
+      if(PHOTO && PHOTO.url) URL.revokeObjectURL(PHOTO.url);
+      PHOTO = null; PHOTO_DEL = true;
+      { const b = document.querySelector('.avatar-btn'); if(b) b.outerHTML = avatarPickHTML(''); }
+      { const rb = document.querySelector('[data-a="removePhoto"]'); if(rb) rb.remove(); }
+      break;
     case 'addCust':
-      PHOTO = null; goTo({view:'addCust', openId:p.id}); break;
+      PHOTO = null; PHOTO_DEL = false; goTo({view:'addCust', openId:p.id}); break;
     case 'saveCust': {
       const n = val('f-name').trim();
       const ph = latin(val('f-phone')).replace(/\D/g, '');
@@ -4405,7 +4413,7 @@ document.addEventListener('click', async e => {
     case 'custMore':
       goTo({view:'custMenu', openId:p.id, custId:c.id}); break;
     case 'cMenuEdit':
-      PHOTO = null; goTo({view:'custEditPage', openId:p.id, custId:c.id}); break;
+      PHOTO = null; PHOTO_DEL = false; goTo({view:'custEditPage', openId:p.id, custId:c.id}); break;
     case 'saveCustPage': {
       const n = val('f-name').trim();
       const ph = latin(val('f-phone')).replace(/\D/g, '');
@@ -4421,19 +4429,23 @@ document.addEventListener('click', async e => {
         if(await codeTakenElsewhere(ac)){ document.getElementById('f-code').focus(); alert('این کد قبلاً در حساب دیگری استفاده شده است. کد دیگری انتخاب کنید.'); return; }
       }
       let pf = null;
+      if(PHOTO_DEL) pf = '';
       if(PHOTO){
         try{ pf = await uploadAvatar(PHOTO.blob, c.id); }
         catch(err){ console.error(err); alert('ذخیره عکس انجام نشد: ' + (err && (err.message || err.error || JSON.stringify(err))) + (navigator.onLine ? '' : ' | اینترنت قطع است')); return; }
       }
       /* اگر اینترنت ضعیف بود، چند بار دوباره تلاش می‌شود و اطلاعات فرم حفظ می‌ماند */
-      const apply = () => { const cc = S.parties.flatMap(pp => pp.c).find(x => x.id === c.id); if(!cc) return; cc.n = n; cc.ph = ph; cc.ds = ds; if(pf) cc.pf = pf; if(ac) cc.ac = ac; };
+      const apply = () => { const cc = S.parties.flatMap(pp => pp.c).find(x => x.id === c.id); if(!cc) return; cc.n = n; cc.ph = ph; cc.ds = ds; if(pf !== null) cc.pf = pf; if(ac) cc.ac = ac; };
       let saved = false;
       for(let attempt = 1; attempt <= 3 && !saved; attempt++){
         saved = await commitWrite(apply, 'تغییرات ذخیره شد', el);
         if(!saved && attempt < 3) await new Promise(r => setTimeout(r, 1500));
       }
       if(saved){
-        PHOTO = null; goTo({view:'list', openId:p.id}, true);
+        if(PHOTO_DEL && c.pf){
+          try{ await supabaseClient.storage.from('avatars').remove([`${cloudUser.id}/${String(c.id).replace(/[^A-Za-z0-9_-]/g, '_')}.jpg`]); }catch(e){ console.warn('avatar remove:', e); }
+        }
+        PHOTO = null; PHOTO_DEL = false; goTo({view:'list', openId:p.id}, true);
       } else {
         const back = (id, v) => { const x = document.getElementById(id); if(x) x.value = v; };
         back('f-name', n); back('f-phone', ph); back('f-ds', ds); back('f-code', ac);
