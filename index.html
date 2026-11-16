@@ -1283,7 +1283,7 @@ window.addEventListener('online', () => { NBSYNCED = false; nbLoad(); });
     resumeAndReload();
   }
   setTimeout(check, 4000);
-  setInterval(check, 60000);
+  setInterval(check, 5000);
   window.addEventListener('online', () => setTimeout(check, 1500));
   document.addEventListener('visibilitychange', () => { if(!document.hidden) check(); });
 })();
@@ -1553,7 +1553,7 @@ function renderNow(){
       </div>
 
 `;
-    kaLoad();
+    kaLoadOnce();
     return;
   }
 
@@ -3334,15 +3334,25 @@ function kaPaint(){
     el.classList.add(age > 3 * 86400000 ? 'old' : 'ok');
   }
 }
+let KA_AT = 0, KA_BUSY = false;
+function kaLoadOnce(){
+  if(Date.now() - KA_AT < 60000) return;
+  KA_AT = Date.now();
+  kaLoad();
+}
 async function kaLoad(){
-  if(!supabaseClient || !cloudUser){ KA.state = 'err'; kaPaint(); return; }
-  KA.state = 'loading'; kaPaint();
+  if(KA_BUSY) return;
+  KA_BUSY = true;
+  if(!supabaseClient || !cloudUser){ KA.state = 'err'; kaPaint(); KA_BUSY = false; return; }
+  /* اگر قبلاً زمان را داریم، دوباره «در حال خواندن» نشان نمی‌دهیم */
+  if(!KA.t) { KA.state = 'loading'; kaPaint(); }
   try{
     const { data, error } = await supabaseClient.from('keepalive').select('last_ping').eq('id', 1).maybeSingle();
     if(error) throw error;
     if(data && data.last_ping){ KA.t = data.last_ping; KA.state = 'ok'; }
     else{ KA.t = null; KA.state = 'none'; }
   }catch(e){ console.warn('keepalive read:', e); KA.state = 'none'; }
+  KA_BUSY = false;
   if(V.view === 'settings') kaPaint();
 }
 const CB_MONTHS = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
