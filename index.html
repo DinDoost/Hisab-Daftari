@@ -851,7 +851,9 @@ function txFiltered(c){
     return true;
   });
 }
-function cfOn(){ return !!(CF.from || CF.to || (CF.type && CF.type !== 'all')); }
+function cfOn(){ return !!(CF.from || CF.to || (CF.type && CF.type !== 'all') || TXQ); }
+/* مشتری با همان تراکنش‌های فیلتر شده برای اشتراک؛ اگر فیلتر نباشد، همه تراکنش‌ها */
+function shareView(c){ return cfOn() ? Object.assign({}, c, { tx: txFiltered(c) }) : c; }
 function custCalHTML(){
   const lbl = o => o ? jStr(o.y, o.m, o.d) : 'انتخاب کنید';
   const T = CF.type || 'all';
@@ -3334,6 +3336,17 @@ function kaPaint(){
     el.classList.add(age > 3 * 86400000 ? 'old' : 'ok');
   }
 }
+function nbNoteEditHTML(x){
+  return sheetHead('ویرایش یادداشت') + `
+        <label for="f-ns">موضوع</label>
+        <input id="f-ns" maxlength="120" value="${esc(x.s)}">
+        <label for="f-nb">یادداشت</label>
+        <textarea id="f-nb" rows="5" style="height:130px;box-sizing:border-box;line-height:1.8;font-size:15px;overflow-y:auto;resize:none;white-space:pre-wrap">${esc(x.b)}</textarea>
+        <label>تاریخ</label>
+        <button type="button" class="dbtn" data-a="calOpen"><span id="dtxt">${esc(x.dt)}</span><span class="cal-ic">${ICON.cal}</span></button>
+        <input type="hidden" id="f-date" value="${esc(x.dt)}">
+        <button class="btn pri-btn" data-a="nbNoteUpdate" data-id="${esc(x.id)}">ذخیره تغییرات</button>`;
+}
 let KA_AT = 0, KA_BUSY = false;
 function kaLoadOnce(){
   if(Date.now() - KA_AT < 60000) return;
@@ -3917,7 +3930,9 @@ document.addEventListener('click', async e => {
       }
       showToast(lgWasEdit ? 'ویرایش با موفقیت ثبت شد' : 'تراکنش با موفقیت ثبت شد', true);
       LG = ledgerFresh();
-      closeSheet(); render(); break;
+      closeSheet();
+      if(lgWasEdit){ goTo({view:'ledgerOne', txId: lgEditId}); break; }
+      render(); break;
     }
     case 'ledgerMore': goTo({view:'ledgerOne', txId: el.dataset.id}); break;
     case 'ledgerEdit': {
@@ -4009,7 +4024,8 @@ document.addEventListener('click', async e => {
     case 'share': openSheet(SHEETS.share(p, c)); prewarmShare(c); break;
     case 'shareAs': {
       const kind = el.dataset.v;
-      const pre = (kind === 'pdf' || kind === 'img') ? SHAREPRE[`${kind}:${c.id}`] : null;
+      const cv = shareView(c);
+      const pre = (!cfOn() && (kind === 'pdf' || kind === 'img')) ? SHAREPRE[`${kind}:${c.id}`] : null;
       if(pre && navigator.canShare && navigator.canShare({ files: [pre] })){
         navigator.share({ files: [pre], title: c.n }).catch(() => {});
         closeSheet();
@@ -4019,9 +4035,9 @@ document.addEventListener('click', async e => {
       if(lbl) lbl.textContent = 'در حال آماده‌سازی...';
       el.disabled = true;
       const ready = () => closeSheet();
-      if(kind === 'img') await shareImg3(c, ready);
-      else if(kind === 'text') await shareCustText(c, ready);
-      else await sharePdf3(c, ready);
+      if(kind === 'img') await shareImg3(cv, ready);
+      else if(kind === 'text') await shareCustText(cv, ready);
+      else await sharePdf3(cv, ready);
       break;
     }
     case 'pMore':
@@ -4211,15 +4227,7 @@ document.addEventListener('click', async e => {
     case 'nbNoteEdit': {
       const x = NY.find(n => n.id === el.dataset.id);
       if(!x) break;
-      openSheet(sheetHead('ویرایش یادداشت') + `
-        <label for="f-ns">موضوع</label>
-        <input id="f-ns" maxlength="120" value="${esc(x.s)}">
-        <label for="f-nb">یادداشت</label>
-        <textarea id="f-nb" rows="5" style="height:130px;box-sizing:border-box;line-height:1.8;font-size:15px;overflow-y:auto;resize:none;white-space:pre-wrap">${esc(x.b)}</textarea>
-        <label>تاریخ</label>
-        <button type="button" class="dbtn" data-a="calOpen"><span id="dtxt">${esc(x.dt)}</span><span class="cal-ic">${ICON.cal}</span></button>
-        <input type="hidden" id="f-date" value="${esc(x.dt)}">
-        <button class="btn pri-btn" data-a="nbNoteUpdate" data-id="${esc(x.id)}">ذخیره تغییرات</button>`); break;
+      openSheet(nbNoteEditHTML(x)); break;
     }
     case 'nbNoteUpdate': {
       const s = val('f-ns').trim(), bt = val('f-nb').trim();
@@ -4233,7 +4241,11 @@ document.addEventListener('click', async e => {
       el.classList.remove('busy');
       if(!ok){ showToast('ویرایش یادداشت انجام نشد.'); return; }
       Object.assign(x, { s, b: bt, dt });
-      closeSheet(); render(); playBell(); showToast('یادداشت ویرایش شد', true);
+      closeSheet(); NBEXP.add(x.id); render();
+      openSheet(sheetHead(`${x.r}. ${esc(x.s || 'بدون موضوع')}`) + `
+        <small style="color:var(--muted)">${esc(x.dt)}</small>
+        <p style="white-space:pre-wrap;line-height:1.9;margin:12px 4px">${esc(x.b)}</p>`);
+      playBell(); showToast('یادداشت ویرایش شد', true);
       break;
     }
     case 'nbNoteDelOpen': {
@@ -4563,7 +4575,16 @@ document.addEventListener('click', async e => {
         }
       }, t ? 'تراکنش ویرایش و ثبت شد' : 'تراکنش ثبت شد');
       el.classList.remove('busy');
-      if(okTx){ afterTx(); }
+      if(okTx){
+        if(t){
+          /* ویرایش: همان تراکنش تنها در صفحه می‌ماند تا درست بودن ویرایش را ببینید */
+          closeSheet();
+          if(V.view === 'txEdit'){ V.view = 'cust'; V.openId = p.id; V.custId = c.id; }
+          LPSEL = { key: `txmode:${p.id}:${c.id}:${t.id}`, view: 'cust', kind: 'txmode', pid: p.id, cid: c.id, tid: t.id };
+          if(!OV.includes('txmode')) pushOv('txmode');
+          render();
+        } else afterTx();
+      }
       break;
     }
     case 'delTx':
