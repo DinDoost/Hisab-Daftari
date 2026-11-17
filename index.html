@@ -1205,7 +1205,7 @@ async function ensureCloudUser(){
 }
 window.addEventListener('online', () => { CLOUD_TRIES = 0; setTimeout(ensureCloudUser, 500); if(S.loggedIn && !cloudReady) setTimeout(refreshCloudQuiet, 1000); });
 document.addEventListener('visibilitychange', () => { if(!document.hidden){ ensureCloudUser(); if(S.loggedIn && !cloudReady) refreshCloudQuiet(); } });
-setInterval(() => { if(!document.hidden && navigator.onLine) ensureCloudUser(); }, 5 * 60 * 1000);
+setInterval(() => { if(!document.hidden && navigator.onLine) ensureCloudUser().then(() => devSync()); }, 5 * 60 * 1000);
 setInterval(() => { if(!document.hidden && navigator.onLine && S.loggedIn && !cloudReady){ CLOUD_TRIES = 0; refreshCloudQuiet(); } }, 20 * 1000);
 window.addEventListener('online', updateNetDot);
 window.addEventListener('offline', updateNetDot);
@@ -1545,6 +1545,7 @@ function renderNow(){
     const rest = inc - exp;
     const LS = ledgerRows(L);
     m.innerHTML = `<header class="top">
+        <span class="net-dot ${netOnline() ? 'on' : 'off'}"><i>${netOnline() ? 'آنلاین' : 'آفلاین'}</i></span>
         <button class="ic dots" data-a="ledgerMenu" aria-label="گزینه‌ها">⋮</button>
         <h1>دخل و خرج</h1>
         <button type="button" class="ic" data-a="ledgerShare" aria-label="اشتراک گذاری">${ICON.share}</button>
@@ -1630,12 +1631,16 @@ function renderNow(){
         <button class="srow-b" data-a="soundToggle">صدای کلیدها: ${S.snd === false ? 'غیرفعال شد' : 'فعال شد'}</button>
         <button class="srow-b" data-a="saveSoundToggle">صدای ثبت تغییرات: ${S.snSave === false ? 'غیرفعال شد' : 'فعال شد'}</button>
         <button class="srow-b srow-out" data-a="authLogout">خروج از حساب</button>
+        <button class="srow-b" data-a="authOthers">خروج از سایر دستگاه‌ها</button>
+        <div class="sec-title" style="margin:14px 4px 6px">دستگاه‌های وارد شده</div>
+        <div id="devlist" style="display:flex;flex-direction:column;gap:8px"><div class="hint">در حال خواندن...</div></div>
         <div class="ka-row"><b>آخرین بروزرسانی سرور</b><span class="ka-v" id="ka-v">${kaText()}</span></div>
       </div>
       </div>
 
 `;
     kaLoadOnce();
+    loadDevicesOnce();
     return;
   }
 
@@ -1735,7 +1740,7 @@ function renderNow(){
     const pays = c.tx.filter(t => t.a < 0).reduce((s, t) => s - t.a, 0);
     m.innerHTML = `
       <header class="top">
-        <span class="sp"></span>
+        <span class="net-dot ${netOnline() ? 'on' : 'off'}"><i>${netOnline() ? 'آنلاین' : 'آفلاین'}</i></span>
         <h1>${esc(c.n)}</h1>
         <button class="ic" data-a="share" data-p="${p.id}" data-c="${c.id}" aria-label="اشتراک گذاری">${ICON.share}</button>
       </header>
@@ -2625,7 +2630,7 @@ async function lkOk(){
       resetToList();
       return lkUnlock();
     }
-    try{ await cloudLoad(); cloudReady = true; }
+    try{ await cloudLoad(); cloudReady = true; devSync(); }
     catch(e){ LK.err = 'دریافت اطلاعات حساب انجام نشد. اتصال اینترنت را بررسی کنید.'; renderLock(); return; }
     LK.recoveryVerified = true; recClear();
     LK.mode = 'newpass'; LK.f.pass = ''; LK.f.pass2 = ''; renderLock(); return;
@@ -2694,7 +2699,7 @@ async function authLogin(){
     return authErr('ایمیل یا رمز عبور درست نیست. اگر حساب قدیمی دارید، رمز را بازیابی کنید.');
   }
   cloudUser = data.user; cloudReady = false;
-  try{ await cloudLoad(); cloudReady = true; }
+  try{ await cloudLoad(); cloudReady = true; devSync(); }
   catch(e){ await supabaseClient.auth.signOut(); cloudUser = null; return authErr('دریافت اطلاعات حساب از پایگاه داده ناموفق بود. تنظیمات دیتابیس را بررسی کنید.'); }
   S.email = cloudUser.email || mail; S.loggedIn = true;
   delete S.passHash; delete S.reg;
@@ -2772,6 +2777,127 @@ async function passSave(){
   LK.recoveryVerified = false; recClear();
   resetToList();
   lkUnlock();
+}
+/* صفحهٔ دستگاه‌ها: هر دستگاه جدا خارج می‌شود، یا همه دستگاه‌های دیگر با هم */
+function devRowsHTML(list){
+  const me = getDeviceId();
+  return (list || []).map(d => {
+    const cur = d.device_id === me;
+    return `<div class="lg-row">
+      <div class="lg-main"><b>${esc(d.name || 'دستگاه')}${cur ? ' (این دستگاه)' : ''}</b>
+      <small>ورود: ${esc(kaFmt(d.created_at))}</small>
+      <small>آخرین فعالیت: ${esc(kaFmt(d.last_seen))}</small></div>
+      ${cur ? '' : `<button class="lg-del" data-a="devRemove" data-d="${esc(d.device_id)}" aria-label="خروج این دستگاه">×</button>`}
+    </div>`;
+  }).join('') || '<div class="hint">دستگاهی ثبت نشده است.</div>';
+}
+async function devSheetLoad(){
+  const box = document.getElementById('devsheet'); if(!box) return;
+  if(!supabaseClient || !cloudUser){ box.innerHTML = '<div class="hint">برای دیدن دستگاه‌ها، به اینترنت وصل و وارد حساب باشید.</div>'; return; }
+  const { data, error } = await supabaseClient.from('user_devices')
+    .select('device_id,name,created_at,last_seen').eq('u', cloudUser.id).order('last_seen', { ascending:false });
+  if(error){ box.innerHTML = '<div class="hint">خواندن لیست انجام نشد.</div>'; return; }
+  const others = (data || []).filter(d => d.device_id !== getDeviceId()).length;
+  box.innerHTML = devRowsHTML(data) + (others ? `<button class="btn danger" data-a="devAllOthers" style="margin-top:10px">خروج از همه دستگاه‌های دیگر (${others})</button>` : '');
+}
+async function authOthers(){
+  if(!supabaseClient || !cloudUser){ showToast('برای این کار باید به اینترنت وصل و وارد حساب باشید.'); return; }
+  openSheet(sheetHead('دستگاه‌های وارد شده') + '<div id="devsheet"><div class="hint">در حال خواندن...</div></div>');
+  devSheetLoad();
+}
+async function devAllOthers(){
+  if(!confirm('از همه دستگاه‌های دیگر خارج می‌شوید. این دستگاه وارد می‌ماند. ادامه می‌دهید؟')) return;
+  if(!supabaseClient || !cloudUser){ showToast('برای این کار باید به اینترنت وصل باشید.'); return; }
+  try{
+    const me = getDeviceId(), uid = cloudUser.id;
+    const { error: e1 } = await supabaseClient.from('user_devices').delete().eq('u', uid).neq('device_id', me);
+    if(e1) throw e1;
+    const { error: e2 } = await supabaseClient.auth.signOut({ scope:'others' });
+    if(e2) throw e2;
+    showToast('از همه دستگاه‌های دیگر خارج شدید.', true);
+  }catch(e){ showToast('انجام نشد: ' + ((e && e.message) || 'خطا')); }
+  devSheetLoad(); DEV_AT = 0; loadDevices();
+}
+/* ---------- دستگاه‌های وارد شده ---------- */
+function getDeviceId(){
+  try{
+    let id = localStorage.getItem('hisab-device-id');
+    if(!id){
+      id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('d' + Date.now() + Math.random().toString(36).slice(2));
+      localStorage.setItem('hisab-device-id', id);
+    }
+    return id;
+  }catch(e){ return 'dev-' + Date.now(); }
+}
+function devName(){
+  const ua = navigator.userAgent || '';
+  const os = /Android/i.test(ua) ? 'اندروید' : /iPhone|iPad/i.test(ua) ? 'آیفون' : /Windows/i.test(ua) ? 'ویندوز' : /Macintosh/i.test(ua) ? 'مک' : 'دستگاه';
+  const br = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : '';
+  return br ? os + ' - ' + br : os;
+}
+/* وقتی این دستگاه از لیست حذف شده باشد، همین‌جا از حساب خارج می‌شود */
+async function deviceRevoked(){
+  try{ if(supabaseClient) await supabaseClient.auth.signOut({ scope:'local' }); }catch(e){}
+  cloudReady = false; cloudUser = null; clearTimeout(cloudSyncTimer);
+  nbReset();
+  S = { cur:'toman', parties:[], email:'', loggedIn:false };
+  try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){}
+  LK.locked = true; LK.mode = 'login'; LK.err = 'این دستگاه از حساب خارج شد.'; LK.buf = ''; LK.f = { mail:'', pass:'', pass2:'' };
+  render(); renderLock();
+}
+let DEV_BUSY = false;
+async function devSync(){
+  if(DEV_BUSY || !supabaseClient || !cloudUser || !navigator.onLine) return;
+  DEV_BUSY = true;
+  try{
+    const uid = cloudUser.id, did = getDeviceId(), nm = devName();
+    const flag = 'hisab-dev-reg-' + uid;
+    const { data, error } = await supabaseClient.from('user_devices')
+      .update({ name:nm, last_seen:new Date().toISOString() })
+      .eq('u', uid).eq('device_id', did).select('id');
+    if(error) return;
+    if(data && data.length) return;
+    if(!localStorage.getItem(flag)){
+      const ins = await supabaseClient.from('user_devices').insert({ u:uid, device_id:did, name:nm });
+      if(!ins.error){ try{ localStorage.setItem(flag, '1'); }catch(e){} }
+      return;
+    }
+    /* قبلاً ثبت شده بود و حالا ردیفش نیست: از طرف دستگاه دیگر حذف شده */
+    await deviceRevoked();
+  }catch(e){ console.warn('device sync:', e); }
+  finally{ DEV_BUSY = false; }
+}
+async function loadDevices(){
+  const box = document.getElementById('devlist'); if(!box) return;
+  if(!supabaseClient || !cloudUser){ box.innerHTML = '<div class="hint">برای دیدن دستگاه‌ها، به اینترنت وصل و وارد حساب باشید.</div>'; return; }
+  const { data, error } = await supabaseClient.from('user_devices')
+    .select('device_id,name,created_at,last_seen').eq('u', cloudUser.id).order('last_seen', { ascending:false });
+  if(error){ box.innerHTML = '<div class="hint">خواندن لیست دستگاه‌ها انجام نشد.</div>'; return; }
+  const me = getDeviceId();
+  box.innerHTML = (data || []).map(d => {
+    const cur = d.device_id === me;
+    return `<div class="lg-row">
+      <div class="lg-main"><b>${esc(d.name || 'دستگاه')}${cur ? ' (این دستگاه)' : ''}</b>
+      <small>ورود: ${esc(kaFmt(d.created_at))}</small>
+      <small>آخرین فعالیت: ${esc(kaFmt(d.last_seen))}</small></div>
+      ${cur ? '' : `<button class="lg-del" data-a="devRemove" data-d="${esc(d.device_id)}" aria-label="خروج این دستگاه">×</button>`}
+    </div>`;
+  }).join('') || '<div class="hint">دستگاهی ثبت نشده است.</div>';
+}
+let DEV_AT = 0;
+function loadDevicesOnce(){
+  if(Date.now() - DEV_AT < 20000) return;
+  DEV_AT = Date.now();
+  loadDevices();
+}
+async function devRemove(devId){
+  if(!devId) return;
+  if(!confirm('این دستگاه از حساب خارج می‌شود. ادامه می‌دهید؟')) return;
+  if(!supabaseClient || !cloudUser){ showToast('برای این کار باید به اینترنت وصل باشید.'); return; }
+  const { error } = await supabaseClient.from('user_devices').delete().eq('u', cloudUser.id).eq('device_id', devId);
+  if(error){ showToast('حذف انجام نشد.'); return; }
+  showToast('دستگاه حذف شد. آن دستگاه وقتی اینترنت داشته باشد خارج می‌شود.', true);
+  DEV_AT = 0; loadDevices(); devSheetLoad();
 }
 async function authLogout(){
   if(!confirm('از حساب خارج می‌شوید؟')) return;
@@ -4090,6 +4216,9 @@ document.addEventListener('click', async e => {
     case 'authForgot': authForgot(); break;
     case 'passSave': passSave(); break;
     case 'authLogout': authLogout(); break;
+    case 'authOthers': authOthers(); break;
+    case 'devRemove': devRemove(el.dataset.d); break;
+    case 'devAllOthers': devAllOthers(); break;
     case 'authToSignup': LK.mode = 'login'; LK.err = 'ثبت‌نام عمومی بسته است.'; renderLock(); break;
     case 'authToLogin': readF(); LK.mode = 'login'; LK.err = ''; renderLock(); break;
     case 'vResend': { const em = LK.purpose === 'signup' ? LK.pend?.mail : LK.f.mail; LK.err = 'در حال ارسال دوباره...'; renderLock(); const req = LK.purpose === 'signup' ? supabaseClient.auth.resend({type:'signup',email:em}) : supabaseClient.auth.resetPasswordForEmail(em); req.then(({error})=>{ const m = String(error?.message || '').toLowerCase(); LK.err = error ? ((m.includes('rate limit') || m.includes('email rate')) ? 'محدودیت ارسال ایمیل فعال است؛ کمی صبر کنید.' : 'ارسال دوباره کُد ناموفق بود.') : 'درخواست ارسال دوباره انجام شد؛ ایمیل را بررسی کنید.'; renderLock(); }).catch(()=>{ LK.err = 'ارسال دوباره انجام نشد. اتصال اینترنت را بررسی کنید.'; renderLock(); }); break; }
@@ -4791,6 +4920,7 @@ async function refreshCloudQuiet(){
   try{ await nbLoad(); }catch(e){ console.warn('notebooks load:', e); }
   await prefLoadCloud();
   cloudReady = true; S.loggedIn = true;
+  devSync();
   if(!liveUIBusy()) render();
   startLive();
 }
