@@ -2642,7 +2642,7 @@ async function lkOk(){
       resetToList();
       return lkUnlock();
     }
-    try{ await cloudLoad(); cloudReady = true; devSync(); }
+    try{ await cloudLoad(); cloudReady = true; devSync().finally(() => { DEV_AT = 0; loadDevices(); }); }
     catch(e){ LK.err = 'دریافت اطلاعات حساب انجام نشد. اتصال اینترنت را بررسی کنید.'; renderLock(); return; }
     LK.recoveryVerified = true; recClear();
     LK.mode = 'newpass'; LK.f.pass = ''; LK.f.pass2 = ''; renderLock(); return;
@@ -2711,7 +2711,7 @@ async function authLogin(){
     return authErr('ایمیل یا رمز عبور درست نیست. اگر حساب قدیمی دارید، رمز را بازیابی کنید.');
   }
   cloudUser = data.user; cloudReady = false;
-  try{ await cloudLoad(); cloudReady = true; devSync(); }
+  try{ await cloudLoad(); cloudReady = true; devSync().finally(() => { DEV_AT = 0; loadDevices(); }); }
   catch(e){ await supabaseClient.auth.signOut(); cloudUser = null; return authErr('دریافت اطلاعات حساب از پایگاه داده ناموفق بود. تنظیمات دیتابیس را بررسی کنید.'); }
   S.email = cloudUser.email || mail; S.loggedIn = true;
   delete S.passHash; delete S.reg;
@@ -2805,18 +2805,30 @@ function devRowsHTML(list){
 }
 async function devSheetLoad(){
   const box = document.getElementById('devsheet'); if(!box) return;
-  if(!supabaseClient || !cloudUser){ box.innerHTML = '<div class="hint">برای دیدن دستگاه‌ها، به اینترنت وصل و وارد حساب باشید.</div>'; return; }
-  const { data, error } = await supabaseClient.from('user_devices')
-    .select('device_id,name,created_at,last_seen').eq('u', cloudUser.id).order('last_seen', { ascending:false });
-  if(error){ box.innerHTML = '<div class="hint">خواندن لیست انجام نشد.</div>'; return; }
-  const others = (data || []).filter(d => d.device_id !== getDeviceId()).length;
-  box.innerHTML = devRowsHTML(data) + (others ? `<button class="btn danger" data-a="devAllOthers" style="margin-top:10px">خروج از همه دستگاه‌های دیگر (${others})</button>` : '');
+  box.innerHTML = '<div class="hint">در حال خواندن...</div>';
+  const r = await devFetch();
+  if(r.err){ box.innerHTML = `<div class="hint">${esc(r.err)}</div><button type="button" class="btn pri-btn" style="margin-top:8px" onclick="devSheetLoad()">خواندن دوباره</button>`; return; }
+  devHistorySave(r.data);
+  const others = r.data.filter(d => d.device_id !== getDeviceId()).length;
+  box.innerHTML = devRowsHTML(r.data) + (others ? `<button class="btn danger" data-a="devAllOthers" style="margin-top:10px">خروج از همه دستگاه‌های دیگر (${others})</button>` : '');
 }
 async function authOthers(){
-  if(!supabaseClient || !cloudUser){ showToast('برای این کار باید به اینترنت وصل و وارد حساب باشید.'); return; }
+  if(!navigator.onLine){ showToast('اینترنت قطع است. اینترنت را روشن کنید.'); return; }
   openSheet(sheetHead('دستگاه‌های وارد شده') + '<div id="devsheet"><div class="hint">در حال خواندن...</div></div>');
-  DEV_AT = 0; loadDevices();
   devSheetLoad();
+}
+/* تاریخ ورود و آخرین فعالیت هر دستگاه را روی همین گوشی ثبت می‌کنیم تا حتی بعد از حذف دستگاه، سابقه بماند */
+function devHistorySave(list){
+  try{
+    const key = 'hisab-dev-history';
+    const all = JSON.parse(localStorage.getItem(key) || '{}');
+    const uid = cloudUser.id;
+    all[uid] = all[uid] || {};
+    (list || []).forEach(d => {
+      all[uid][d.device_id] = { name: d.name || 'دستگاه', login: d.created_at, last: d.last_seen };
+    });
+    localStorage.setItem(key, JSON.stringify(all));
+  }catch(e){ console.warn('device history:', e); }
 }
 async function devAllOthers(){
   if(!confirm('از همه دستگاه‌های دیگر خارج می‌شوید. این دستگاه وارد می‌ماند. ادامه می‌دهید؟')) return;
@@ -2865,44 +2877,56 @@ async function devSync(){
   try{
     const uid = cloudUser.id, did = getDeviceId(), nm = devName();
     const flag = 'hisab-dev-reg-' + uid;
-    /* فقط خواندن: اگر خواندن خطا بدهد (اینترنت، سیاست دسترسی و...) هرگز خارج نمی‌شویم */
-    const sel = await supabaseClient.from('user_devices').select('device_id').eq('u', uid).eq('device_id', did);
-    if(sel.error) return;
-    if(sel.data && sel.data.length){
+    const sel = await supabaseClient.from('user_devices').select('device_id').eq('u', uid);
+    if(sel.error || !sel.data) return;
+    const ids = sel.data.map(r => r.device_id);
+    if(ids.includes(did)){
       try{ localStorage.setItem(flag, '1'); }catch(e){}
       await supabaseClient.from('user_devices').update({ name:nm, last_seen:new Date().toISOString() }).eq('u', uid).eq('device_id', did);
       return;
     }
-    if(!localStorage.getItem(flag)){
+    if(!localStorage.getItem(flag) || ids.length === 0){
       const ins = await supabaseClient.from('user_devices').insert({ u:uid, device_id:did, name:nm });
       if(!ins.error){ try{ localStorage.setItem(flag, '1'); }catch(e){} }
       return;
     }
-    /* ردیف این دستگاه دیده نمی‌شود. برای جلوگیری از خروج ناخواسته، دیگر به‌خودی‌خود از حساب خارج نمی‌شویم */
-    return;
+    /* لیست دیده می‌شود، دستگاه‌های دیگر در آن هستند، ولی ردیف این دستگاه نیست: این دستگاه حذف شده است */
+    await deviceRevoked();
   }catch(e){ console.warn('device sync:', e); }
   finally{ DEV_BUSY = false; }
 }
+async function ensureSupabaseLib(){
+  if(supabaseClient) return true;
+  for(const src of SUPA_SOURCES){
+    try{ await loadScriptOnce(src); }catch(e){ continue; }
+    makeSupabaseClient();
+    if(supabaseClient) return true;
+  }
+  return !!supabaseClient;
+}
+async function devFetch(){
+  if(!navigator.onLine) return { err:'اینترنت قطع است. اینترنت را روشن کنید.' };
+  if(!(await ensureSupabaseLib())) return { err:'اتصال به سرور برقرار نشد.' };
+  if(!cloudUser) await ensureCloudUser();
+  if(!cloudUser) return { err:'نشست حساب پیدا نشد؛ یک بار از حساب خارج و دوباره وارد شوید.' };
+  const r = await withTimeoutSoft(supabaseClient.from('user_devices')
+    .select('device_id,name,created_at,last_seen').eq('u', cloudUser.id).order('last_seen', { ascending:false }), 10000);
+  if(!r || r.error || !r.data) return { err:'خواندن لیست انجام نشد.' };
+  return { data: r.data };
+}
 async function loadDevices(){
   const box = document.getElementById('devlist'); if(!box) return;
-  if(!supabaseClient || !cloudUser){ box.innerHTML = '<div class="hint">برای دیدن دستگاه‌ها، به اینترنت وصل و وارد حساب باشید.</div>'; return; }
-  const { data, error } = await supabaseClient.from('user_devices')
-    .select('device_id,name,created_at,last_seen').eq('u', cloudUser.id).order('last_seen', { ascending:false });
-  if(error){ box.innerHTML = '<div class="hint">خواندن لیست دستگاه‌ها انجام نشد.</div>'; return; }
-  const me = getDeviceId();
-  box.innerHTML = (data || []).map(d => {
-    const cur = d.device_id === me;
-    return `<div class="lg-row">
-      <div class="lg-main"><b>${esc(d.name || 'دستگاه')}${cur ? ' (این دستگاه)' : ''}</b>
-      <small>ورود: ${esc(kaFmt(d.created_at))}</small>
-      <small>آخرین فعالیت: ${esc(kaFmt(d.last_seen))}</small></div>
-      ${cur ? '' : `<button class="lg-del" data-a="devRemove" data-d="${esc(d.device_id)}" aria-label="خروج این دستگاه">×</button>`}
-    </div>`;
-  }).join('') || '<div class="hint">دستگاهی ثبت نشده است.</div>';
+  box.innerHTML = '<div class="hint">در حال خواندن...</div>';
+  const r = await devFetch();
+  if(r.err){
+    DEV_AT = 0;
+    box.innerHTML = `<div class="hint">${esc(r.err)}</div><button type="button" class="btn pri-btn" style="margin-top:8px" onclick="loadDevices()">خواندن دوباره</button>`;
+    return;
+  }
+  box.innerHTML = devRowsHTML(r.data);
 }
 let DEV_AT = 0;
 function loadDevicesOnce(){
-  if(!supabaseClient || !cloudUser){ loadDevices(); return; }
   if(Date.now() - DEV_AT < 20000) return;
   DEV_AT = Date.now();
   loadDevices();
@@ -4979,7 +5003,7 @@ async function refreshCloudQuiet(){
   try{ await nbLoad(); }catch(e){ console.warn('notebooks load:', e); }
   await prefLoadCloud();
   cloudReady = true; S.loggedIn = true;
-  devSync();
+  devSync().finally(() => { DEV_AT = 0; loadDevices(); });
   if(!liveUIBusy()) render();
   startLive();
 }
