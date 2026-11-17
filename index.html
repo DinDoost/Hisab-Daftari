@@ -533,7 +533,6 @@ function makeSupabaseClient(){
   if(!supabaseClient && window.supabase?.createClient)
     supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
-/* اگر کتابخانه از CDN اول نیامد، از چند منبع دیگر امتحان می‌شود */
 function loadScriptOnce(src){
   return new Promise((res, rej) => {
     const el = document.createElement('script');
@@ -568,9 +567,7 @@ async function settingsSyncNow(){
   if(!supabaseClient || !cloudUser) return;
   try{
     const row = { u: cloudUser.id, lgcur: lgCurKey(), arc: S.archIds || [] };
-    ownTouch();
     const { error } = await supabaseClient.from('s').upsert(row, { onConflict:'u' });
-    ownTouch();
     if(error){ console.warn('settings sync:', error); return; }
     SET_LAST_KEY = settingsKey(); SET_PENDING = false;
   }catch(e){ console.warn('settings sync:', e); }
@@ -665,72 +662,37 @@ async function cloudLoad(){
   try{ await settingsLoad(); }catch(e){ console.warn('settings load:', e); }
   S = { ...S, cur:S.cur || 'toman', parties, ledger, email:cloudUser.email || S.email || '', loggedIn:true };
   try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){}
-  /* عکس از وضعیت سرور برای همگام‌سازی فقط تغییرها */
-  try{
-    const R = cloudRows(cloudUser.id);
-    CLOUD_SNAP = { p:snapMap(R.p), c:snapMap(R.c), t:snapMap(R.t) };
-    if(ledgerCloudOk && (lr.data || []).length) CLOUD_SNAP.l = snapMap(R.l);
-  }catch(e){ CLOUD_SNAP = null; }
-}
-
-/* همگام‌سازی فقط تغییرها: از آخرین حالت همگام‌شده عکس می‌گیریم و فقط رکوردهای جدید/ویرایش‌شده را upsert و فقط رکوردهای حذف‌شده را delete می‌کنیم */
-let CLOUD_SNAP = null, OWN_T = 0;
-function ownTouch(){ OWN_T = Date.now(); }
-function cloudRows(u){
-  const parties = S.parties || [];
-  const customers = parties.flatMap(p => (p.c || []).map(c => ({ p, c })));
-  const transactions = customers.flatMap(x => (x.c.tx || []).map(t => ({ c:x.c, t })));
-  return {
-    p: parties.map(p => ({ id:String(p.id), u, n:p.n || '', cur:p.cur || 'toman' })),
-    c: customers.map(x => ({ id:String(x.c.id), u, p:String(x.p.id), n:x.c.n || '', ph:x.c.ph || '', ds:x.c.ds || '', pf:x.c.pf || null, ac:x.c.ac || null })),
-    t: transactions.map(x => ({ id:String(x.t.id), u, c:String(x.c.id), a:Math.trunc(Number(x.t.a)||0), d:x.t.d || '', y:Math.trunc(Number(x.t.y)||0), m:Math.trunc(Number(x.t.m)||1), dd:Math.trunc(Number(x.t.dd)||1), ts:Math.trunc(Number(x.t.ts)||0), hh: x.t.hh == null ? null : Math.trunc(Number(x.t.hh)), mm: x.t.mm == null ? null : Math.trunc(Number(x.t.mm)) })),
-    l: (S.ledger || []).map(x => ({ id:String(x.id), u, ty:x.type === 'out' ? 'out' : 'in', a:Math.trunc(Number(x.a)||0), d:x.d || '',
-          y:Math.trunc(Number(x.y)||0), m:Math.trunc(Number(x.m)||1), dd:Math.trunc(Number(x.dd)||1), ts:Math.trunc(Number(x.ts)||0),
-          hh: x.hh == null ? null : Math.trunc(Number(x.hh)), mm: x.mm == null ? null : Math.trunc(Number(x.mm)) }))
-  };
-}
-function snapMap(rows){ return new Map(rows.map(r => [r.id, JSON.stringify(r)])); }
-function snapPlan(table, rows){
-  const old = CLOUD_SNAP && CLOUD_SNAP[table];
-  if(!old) return { table, rows, up:rows, gone:null };
-  const now = new Set(rows.map(r => r.id));
-  return { table, rows, up:rows.filter(r => old.get(r.id) !== JSON.stringify(r)), gone:[...old.keys()].filter(id => !now.has(id)) };
-}
-async function snapUpsert(pl){
-  if(pl.up.length){
-    const {error} = await supabaseClient.from(pl.table).upsert(pl.up, { onConflict:'id' });
-    if(error) throw error;
-  }
-}
-async function snapDelete(pl, u){
-  if(pl.gone === null){
-    /* بار اولِ این جدول: مثل قبل همه‌ی موارد اضافه روی سرور پاک می‌شود */
-    let q = supabaseClient.from(pl.table).delete().eq('u',u);
-    if(pl.rows.length) q = q.not('id','in',`(${pl.rows.map(r => String(r.id)).join(',')})`);
-    const {error} = await q;
-    if(error) throw error;
-  }else{
-    for(let i = 0; i < pl.gone.length; i += 100){
-      const {error} = await supabaseClient.from(pl.table).delete().eq('u',u).in('id', pl.gone.slice(i, i + 100));
-      if(error) throw error;
-    }
-  }
-  (CLOUD_SNAP = CLOUD_SNAP || {})[pl.table] = snapMap(pl.rows);
 }
 
 async function cloudSyncNow(){
   if(!supabaseClient || !cloudUser) return;
   if(cloudSyncing){ cloudSyncAgain = true; return; }
-  cloudSyncing = true; ownTouch();
+  cloudSyncing = true;
   try{
     do{
       cloudSyncAgain = false;
       const u = cloudUser.id;
-      const R = cloudRows(u);
-      const plP = snapPlan('p', R.p), plC = snapPlan('c', R.c), plT = snapPlan('t', R.t);
-      /* اول افزودن/ویرایش (والد به فرزند)، بعد حذف (فرزند به والد) */
-      await snapUpsert(plP); await snapUpsert(plC); await snapUpsert(plT);
-      await snapDelete(plT, u); await snapDelete(plC, u); await snapDelete(plP, u);
+      const parties = S.parties || [];
+      const customers = parties.flatMap(p => (p.c || []).map(c => ({ p, c })));
+      const transactions = customers.flatMap(x => (x.c.tx || []).map(t => ({ c:x.c, t })));
+      const pRows = parties.map(p => ({ id:String(p.id), u, n:p.n || '', cur:p.cur || 'toman' }));
+      const cRows = customers.map(x => ({ id:String(x.c.id), u, p:String(x.p.id), n:x.c.n || '', ph:x.c.ph || '', ds:x.c.ds || '', pf:x.c.pf || null, ac:x.c.ac || null }));
+      const tRows = transactions.map(x => ({ id:String(x.t.id), u, c:String(x.c.id), a:Math.trunc(Number(x.t.a)||0), d:x.t.d || '', y:Math.trunc(Number(x.t.y)||0), m:Math.trunc(Number(x.t.m)||1), dd:Math.trunc(Number(x.t.dd)||1), ts:Math.trunc(Number(x.t.ts)||0), hh: x.t.hh == null ? null : Math.trunc(Number(x.t.hh)), mm: x.t.mm == null ? null : Math.trunc(Number(x.t.mm)) }));
+      for(const [table, rows] of [['p',pRows],['c',cRows],['t',tRows]]){
+        if(rows.length){
+          const {error} = await supabaseClient.from(table).upsert(rows, { onConflict:'id' });
+          if(error) throw error;
+        }
+      }
+      async function deleteMissing(table, rows){
+        let q = supabaseClient.from(table).delete().eq('u',u);
+        if(rows.length) q = q.not('id','in',`(${rows.map(r => String(r.id)).join(',')})`);
+        const {error} = await q;
+        if(error) throw error;
+      }
+      await deleteMissing('t', tRows);
+      await deleteMissing('c', cRows);
+      await deleteMissing('p', pRows);
       /* دفتر دخل و خرج (جدول l) — اگر خطا داد، بقیهٔ اطلاعات همچنان همگام می‌شود */
       if(!ledgerCloudOk){
         const pr = await supabaseClient.from('l').select('id,ty,a,d,y,m,dd,ts,hh,mm').eq('u',u);
@@ -741,14 +703,18 @@ async function cloudSyncNow(){
           const have = new Set((S.ledger || []).map(x => String(x.id)));
           (pr.data || []).forEach(r => { if(!have.has(String(r.id))) (S.ledger = S.ledger || []).push({ id:r.id, type:r.ty === 'out' ? 'out' : 'in', a:Number(r.a)||0, d:r.d||'', y:Number(r.y)||0, m:Number(r.m)||1, dd:Number(r.dd)||1, ts:Number(r.ts)||0, hh:r.hh == null ? null : Number(r.hh), mm:r.mm == null ? null : Number(r.mm) }); });
           ledgerCloudOk = true;
-          if(CLOUD_SNAP) delete CLOUD_SNAP.l;
         }
       }
       if(ledgerCloudOk){
         try{
-          const plL = snapPlan('l', cloudRows(u).l);
-          await snapUpsert(plL);
-          await snapDelete(plL, u);
+          const lRows = (S.ledger || []).map(x => ({ id:String(x.id), u, ty:x.type === 'out' ? 'out' : 'in', a:Math.trunc(Number(x.a)||0), d:x.d || '',
+            y:Math.trunc(Number(x.y)||0), m:Math.trunc(Number(x.m)||1), dd:Math.trunc(Number(x.dd)||1), ts:Math.trunc(Number(x.ts)||0),
+            hh: x.hh == null ? null : Math.trunc(Number(x.hh)), mm: x.mm == null ? null : Math.trunc(Number(x.mm)) }));
+          if(lRows.length){
+            const {error} = await supabaseClient.from('l').upsert(lRows, { onConflict:'id' });
+            if(error) throw error;
+          }
+          await deleteMissing('l', lRows);
         }catch(e){
           console.error('Ledger sync error:', e);
           lastLedgerErr = (e && e.message) || String(e);
@@ -758,7 +724,7 @@ async function cloudSyncNow(){
       }
     }while(cloudSyncAgain);
   }catch(e){ console.error('Supabase sync error:', e); return false; }
-  finally{ cloudSyncing = false; ownTouch(); }
+  finally{ cloudSyncing = false; }
   return true;
 }
 function queueCloudSync(){
@@ -968,6 +934,7 @@ async function cloudCommit(){
 async function commitWrite(mutate, okMsg, btn){
   if(WRITING) return false;
   if(!navigator.onLine){ showToast(NET_MSG); return false; }
+  if(cloudUser && !cloudReady){ showToast('اطلاعات هنوز از سرور خوانده نشده؛ چند لحظه صبر کنید و دوباره ثبت کنید.'); CLOUD_TRIES = 0; refreshCloudQuiet(); return false; }
   WRITING = true;
   if(btn) btn.classList.add('busy');
   const snap = JSON.stringify(S);
@@ -1204,7 +1171,7 @@ function withTimeoutSoft(p, ms){
 }
 /* تازه‌سازی نشست در پس‌زمینه: وقتی اینترنت هست، توکن تازه گرفته می‌شود تا برنامه ساعت‌ها آفلاین هم کار کند */
 /* بررسی نشست: یک درخواست در هر لحظه. getSession توکن منقضی را خودش تازه می‌کند.
-   اگر اینترنت نباشد یا پاسخ نیاید، نشست فعلی نگه داشته می‌شود و هیچ‌وقت پاک نمی‌شود. */
+   اگر اینترنت نباشد یا پاسخ نیاید، نشست فعلی نگه داشته می‌شود و پاک نمی‌شود. */
 let SESS_P = null;
 async function ensureCloudUser(){
   if(!supabaseClient) return cloudUser;
@@ -1219,9 +1186,10 @@ async function ensureCloudUser(){
   })();
   return SESS_P;
 }
-window.addEventListener('online', () => setTimeout(ensureCloudUser, 500));
-document.addEventListener('visibilitychange', () => { if(!document.hidden) ensureCloudUser(); });
+window.addEventListener('online', () => { CLOUD_TRIES = 0; setTimeout(ensureCloudUser, 500); if(S.loggedIn && !cloudReady) setTimeout(refreshCloudQuiet, 1000); });
+document.addEventListener('visibilitychange', () => { if(!document.hidden){ ensureCloudUser(); if(S.loggedIn && !cloudReady) refreshCloudQuiet(); } });
 setInterval(() => { if(!document.hidden && navigator.onLine) ensureCloudUser(); }, 5 * 60 * 1000);
+setInterval(() => { if(!document.hidden && navigator.onLine && S.loggedIn && !cloudReady){ CLOUD_TRIES = 0; refreshCloudQuiet(); } }, 20 * 1000);
 /* اگر نشست زنده نیست (آفلاین یا توکن منقضی)، دفترچه‌ها از کش همان حساب خوانده شوند */
 function nbFromCache(){
   if(cloudUser) return;
@@ -1257,17 +1225,13 @@ async function nbLoad(){
 }
 async function nbSaveRow(table, row){
   if(!supabaseClient || !cloudUser) return false;
-  ownTouch();
   const { error } = await supabaseClient.from(table).upsert(row, { onConflict:'id' });
-  ownTouch();
   if(error){ console.warn(error); return false; }
   return true;
 }
 async function nbDeleteRow(table, id){
   if(!supabaseClient || !cloudUser) return false;
-  ownTouch();
   const { error } = await supabaseClient.from(table).delete().eq('id', id).eq('u', cloudUser.id);
-  ownTouch();
   if(error){ console.warn(error); return false; }
   return true;
 }
@@ -1339,11 +1303,7 @@ function renderNotebooks(m){
     <div id="nbRows" style="margin-top:10px">${nbRowsHTML(b)}</div>
     <button class="fab" data-a="nbNoteOpen" data-p="${esc(b.id)}">${ICON.plus}<span>افزودن یادداشت</span></button>`}`;
 }
-/* با برگشتن اینترنت فقط وقتی دوباره می‌خواند که خواندن اولِ باز شدن برنامه ناموفق بوده؛ در غیر این صورت چیزی نمی‌خواند */
-window.addEventListener('online', () => {
-  if(S.loggedIn && !cloudReady){ CLOUD_TRIES = 0; setTimeout(refreshCloudQuiet, 1000); }
-  else if(!NBSYNCED) nbLoad();
-});
+window.addEventListener('online', () => { NBSYNCED = false; nbLoad(); });
 /* بروزرسانی خودکار: اگر فایل جدید در سرور باشد، بدون کشیدن صفحه، برنامه خودش بروز می‌شود */
 (function autoUpdate(){
   const KEY = 'hesab-build';
@@ -1426,9 +1386,7 @@ function prefCur(){
 async function prefSyncNow(d){
   if(!supabaseClient || !cloudUser || !navigator.onLine) return;
   try{
-    ownTouch();
     const { error } = await supabaseClient.from('pref').upsert({ u: cloudUser.id, d }, { onConflict:'u' });
-    ownTouch();
     if(error) console.warn('pref sync:', error);
   }catch(e){ console.warn('pref sync:', e); }
 }
@@ -2621,6 +2579,7 @@ async function lkOk(){
   if(LK.mode === 'unlock'){
     if(LK.buf === S.pin){
       nbFromCache();
+      if(!cloudUser) await ensureCloudUser();
       if(cloudUser){ lkUnlock(); refreshCloudQuiet(); return; }
       /* اگر قبلاً وارد شده‌اید، با PIN درست همیشه باز شود (حتی اگر نشست ابری با VPN/اینترنت ضعیف خوانده نشد) */
       if(S.loggedIn && S.email){ lkUnlock(); return; }
@@ -2797,7 +2756,6 @@ async function passSave(){
 }
 async function authLogout(){
   if(!confirm('از حساب خارج می‌شوید؟')) return;
-  CLOUD_SNAP = null;
   if(supabaseClient) await supabaseClient.auth.signOut();
   cloudReady = false; cloudUser = null; clearTimeout(cloudSyncTimer);
   nbReset();
@@ -3419,7 +3377,7 @@ function ledgerFormHTML(){
 }
 function ledgerFresh(){ return { type:'out', amt:'', desc:'', date:todayStr(), hh:new Date().getHours(), mm:new Date().getMinutes(), err:'', editId:null, sel:null }; }
 /* ---------- آخرین بروزرسانی سرور (نگه‌دارندهٔ Supabase) ---------- */
-let KA = { t:null, state:'idle', reason:'' };   /* idle | loading | ok | none | err */
+let KA = { t:null, state:'idle' };   /* idle | loading | ok | none | err */
 function kaFmt(iso){
   try{
     const d = new Date(iso);
@@ -3430,7 +3388,7 @@ function kaFmt(iso){
 }
 function kaText(){
   if(KA.state === 'loading' || KA.state === 'idle') return 'در حال خواندن...';
-  if(KA.state === 'err') return 'خوانده نشد' + (KA.reason ? ' (' + KA.reason + ')' : '');
+  if(KA.state === 'err') return 'خوانده نشد';
   if(KA.state === 'none' || !KA.t) return 'هنوز بروز نشده';
   return kaFmt(KA.t);
 }
@@ -3463,15 +3421,16 @@ function kaLoadOnce(){
 async function kaLoad(){
   if(KA_BUSY) return;
   KA_BUSY = true;
-  if(!supabaseClient || !cloudUser){ KA.state = 'err'; KA.reason = !supabaseClient ? 'کتابخانه نیامد' : 'نشست نیست'; kaPaint(); KA_BUSY = false; return; }
+  if(!cloudUser) await ensureCloudUser();
+  if(!supabaseClient || !cloudUser){ KA.state = 'err'; kaPaint(); KA_BUSY = false; return; }
   /* اگر قبلاً زمان را داریم، دوباره «در حال خواندن» نشان نمی‌دهیم */
   if(!KA.t) { KA.state = 'loading'; kaPaint(); }
   try{
     const { data, error } = await supabaseClient.from('keepalive').select('last_ping').eq('id', 1).maybeSingle();
     if(error) throw error;
-    KA.reason = ''; if(data && data.last_ping){ KA.t = data.last_ping; KA.state = 'ok'; }
+    if(data && data.last_ping){ KA.t = data.last_ping; KA.state = 'ok'; }
     else{ KA.t = null; KA.state = 'none'; }
-  }catch(e){ console.warn('keepalive read:', e); KA.state = 'err'; KA.reason = (e && (e.message || e.code)) || 'خطا'; }
+  }catch(e){ console.warn('keepalive read:', e); KA.state = 'none'; }
   KA_BUSY = false;
   if(V.view === 'settings') kaPaint();
 }
@@ -4836,12 +4795,10 @@ function startLive(){
       .on('postgres_changes', sub('ny'), liveKick)
       .on('postgres_changes', sub('s'), liveKick)
       .on('postgres_changes', sub('pref'), liveKick)
-      .subscribe();
+      .subscribe((st) => { if(st === 'SUBSCRIBED') setTimeout(() => liveRefresh(), 300); });
   }catch(e){ console.warn('realtime:', e); }
 }
 function liveKick(){
-  /* رویدادهای ناشی از ثبت همین گوشی نیازی به خواندن دوباره‌ی همه‌چیز ندارند */
-  if(cloudSyncing || Date.now() - OWN_T < 4000) return;
   clearTimeout(LIVE_T);
   LIVE_T = setTimeout(liveRefresh, 400);
 }
@@ -4856,7 +4813,9 @@ let TOUCHING = false, TOUCH_T = 0;
 document.addEventListener('touchstart', () => { TOUCHING = true; }, { passive:true });
 ['touchend','touchcancel'].forEach(ev => document.addEventListener(ev, () => { TOUCHING = false; TOUCH_T = Date.now(); }, { passive:true }));
 async function liveRefresh(){
-  if(!cloudUser || !supabaseClient || !navigator.onLine) return;
+  if(!supabaseClient || !navigator.onLine) return;
+  if(!cloudUser) await ensureCloudUser();
+  if(!cloudUser) return;
   if(TOUCHING || Date.now() - TOUCH_T < 1500){ clearTimeout(LIVE_T); LIVE_T = setTimeout(liveRefresh, 1600); return; }
   /* اگر همین گوشی در حال ثبت است، کمی صبر می‌کنیم تا تغییر خودش گم نشود */
   if(WRITING || cloudSyncing || NBLOADING){ clearTimeout(LIVE_T); LIVE_T = setTimeout(liveRefresh, 1200); return; }
