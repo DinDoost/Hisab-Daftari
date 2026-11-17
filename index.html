@@ -510,6 +510,14 @@ body:has(#main > .list), body:has(#main > .lg-scroll), body:has(#main > #nbRows)
 .lg-cur-row.on{border-color:#16a34a}
 .lg-dot{width:22px;height:22px;border-radius:50%;border:2px solid var(--pri);background:#fff;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;flex:none}
 .lg-cur-row.on .lg-dot{background:#16a34a;border-color:#16a34a}
+.title-wrap{display:flex;align-items:center;justify-content:center;gap:6px;min-width:0;flex:1}
+.title-btn{min-width:0;max-width:100%;white-space:nowrap;overflow:hidden;flex:0 1 auto}
+.net-dot{display:inline-flex;align-items:center;direction:rtl;flex:none;line-height:1;margin-right:4px}
+.net-dot i{font-style:normal;font-size:9px;font-weight:600}
+.net-dot.on .net-dot-circle{background:#16a34a}
+.net-dot.off .net-dot-circle{background:#dc2626}
+.net-dot.on i{color:#16a34a}
+.net-dot.off i{color:#dc2626}
 </style>
 </head>
 <body>
@@ -557,6 +565,14 @@ const SUPA_READY = (async () => {
   }
 })();
 let cloudUser = null, cloudReady = false, cloudSyncTimer = null;
+let LIVE_OK = false;   /* آیا اتصال زنده با سرور برقرار است */
+function netOnline(){ return !!(navigator.onLine && cloudUser && cloudReady && LIVE_OK); }
+function updateNetDot(){
+  const el = document.getElementById('netdot'); if(!el) return;
+  const on = netOnline();
+  el.className = 'net-dot ' + (on ? 'on' : 'off');
+  const t = el.querySelector('i'); if(t) t.textContent = on ? 'آنلاین' : 'آفلاین';
+}
 let cloudSyncing = false, cloudSyncAgain = false;
 let ledgerCloudOk = true, ledgerWarned = false, ledgerStrict = false, lastLedgerErr = '';
 
@@ -1190,6 +1206,8 @@ window.addEventListener('online', () => { CLOUD_TRIES = 0; setTimeout(ensureClou
 document.addEventListener('visibilitychange', () => { if(!document.hidden){ ensureCloudUser(); if(S.loggedIn && !cloudReady) refreshCloudQuiet(); } });
 setInterval(() => { if(!document.hidden && navigator.onLine) ensureCloudUser(); }, 5 * 60 * 1000);
 setInterval(() => { if(!document.hidden && navigator.onLine && S.loggedIn && !cloudReady){ CLOUD_TRIES = 0; refreshCloudQuiet(); } }, 20 * 1000);
+window.addEventListener('online', updateNetDot);
+window.addEventListener('offline', updateNetDot);
 /* اگر نشست زنده نیست (آفلاین یا توکن منقضی)، دفترچه‌ها از کش همان حساب خوانده شوند */
 function nbFromCache(){
   if(cloudUser) return;
@@ -2364,7 +2382,7 @@ function renderMain(m){
   m.innerHTML = `
     <header class="top">
       <button class="ic" data-a="menu" aria-label="منو">${ICON.menu}</button>
-      <button class="title-btn" data-a="togglePick">${esc(title)} <span class="caret">${V.pick ? '▴' : '▾'}</span></button>
+      <span class="net-dot ${netOnline() ? 'on' : 'off'}" id="netdot"><i>${netOnline() ? 'آنلاین' : 'آفلاین'}</i></span><span class="title-wrap"><button class="title-btn" data-a="togglePick">${esc(title)} <span class="caret">${V.pick ? '▴' : '▾'}</span></button></span>
       ${p ? `<button class="arch-hd" data-a="archOpen" data-p="${p.id}">بایگانی</button>` : '<span class="sp"></span>'}
     </header>
     ${(V.pick || !p) ? pickRow(p) : ''}
@@ -3437,7 +3455,7 @@ async function kaLoad(){
 const CB_MONTHS = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
 const PORTAL_PHONE_KEY = 'hisab_portal_phone';
 function fitMiniNames(){
-  document.querySelectorAll('.mini-name').forEach(el => {
+  document.querySelectorAll('.mini-name, .title-btn').forEach(el => {
     el.style.fontSize = '';
     let fs = parseFloat(getComputedStyle(el).fontSize) || 14;
     while(el.scrollWidth > el.clientWidth + 1 && fs > 8){ fs -= 0.5; el.style.fontSize = fs + 'px'; }
@@ -4795,7 +4813,7 @@ function startLive(){
       .on('postgres_changes', sub('ny'), liveKick)
       .on('postgres_changes', sub('s'), liveKick)
       .on('postgres_changes', sub('pref'), liveKick)
-      .subscribe((st) => { if(st === 'SUBSCRIBED') setTimeout(() => liveRefresh(), 300); });
+      .subscribe((st) => { LIVE_OK = st === 'SUBSCRIBED'; updateNetDot(); if(st === 'SUBSCRIBED') setTimeout(() => liveRefresh(), 300); });
   }catch(e){ console.warn('realtime:', e); }
 }
 function liveKick(){
