@@ -3573,10 +3573,20 @@ function kaPaint(){
 async function kaRetry(){
   KA_AT = 0; KA_BUSY = false;
   KA.state = 'loading'; kaPaint();
+  let why = '';
   try{
-    if(!navigator.onLine) throw new Error('offline');
+    if(!navigator.onLine){ why = 'اینترنت گوشی قطع است. اینترنت را روشن کنید.'; throw new Error(why); }
+    /* اگر کتابخانهٔ Supabase در بار اول بارگذاری نشده، همین‌جا دوباره تلاش می‌کنیم */
+    if(!supabaseClient){
+      for(const src of SUPA_SOURCES){
+        try{ await loadScriptOnce(src); }catch(e){ continue; }
+        makeSupabaseClient();
+        if(supabaseClient) break;
+      }
+      if(!supabaseClient){ why = 'اتصال به سرور برقرار نشد. اینترنت را بررسی کنید.'; throw new Error(why); }
+    }
     await ensureCloudUser();
-    if(!cloudUser) throw new Error('no session');
+    if(!cloudUser){ why = 'نشست حساب پیدا نشد. یک بار از حساب خارج و دوباره وارد شوید.'; throw new Error(why); }
     /* اتصال زنده را از نو برقرار می‌کنیم */
     if(LIVE_CH){ try{ supabaseClient.removeChannel(LIVE_CH); }catch(e){} }
     LIVE_CH = null; LIVE_UID = null; LIVE_OK = false;
@@ -3584,7 +3594,10 @@ async function kaRetry(){
     cloudReady = true;
     startLive();
     devSync();
-  }catch(e){ console.warn('manual reconnect:', e); }
+  }catch(e){
+    console.warn('manual reconnect:', e);
+    if(why) showToast(why);
+  }
   KA_BUSY = false;
   await kaLoad();
   updateNetDot();
