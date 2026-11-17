@@ -1321,7 +1321,7 @@ function renderNotebooks(m){
     <div id="nbRows" style="margin-top:10px">${nbRowsHTML(b)}</div>
     <button class="fab" data-a="nbNoteOpen" data-p="${esc(b.id)}">${ICON.plus}<span>افزودن یادداشت</span></button>`}`;
 }
-window.addEventListener('online', () => { NBSYNCED = false; nbLoad(); });
+window.addEventListener('online', () => { if(!NBSYNCED && cloudUser) nbLoad(); });
 /* بروزرسانی خودکار: اگر فایل جدید در سرور باشد، بدون کشیدن صفحه، برنامه خودش بروز می‌شود */
 (function autoUpdate(){
   const KEY = 'hesab-build';
