@@ -568,10 +568,11 @@ let cloudUser = null, cloudReady = false, cloudSyncTimer = null;
 let LIVE_OK = false;   /* آیا اتصال زنده با سرور برقرار است */
 function netOnline(){ return !!(navigator.onLine && cloudUser && cloudReady && LIVE_OK); }
 function updateNetDot(){
-  const el = document.getElementById('netdot'); if(!el) return;
   const on = netOnline();
-  el.className = 'net-dot ' + (on ? 'on' : 'off');
-  const t = el.querySelector('i'); if(t) t.textContent = on ? 'آنلاین' : 'آفلاین';
+  document.querySelectorAll('.net-dot').forEach(el => {
+    el.className = 'net-dot ' + (on ? 'on' : 'off');
+    const t = el.querySelector('i'); if(t) t.textContent = on ? 'آنلاین' : 'آفلاین';
+  });
 }
 let cloudSyncing = false, cloudSyncAgain = false;
 let ledgerCloudOk = true, ledgerWarned = false, ledgerStrict = false, lastLedgerErr = '';
@@ -1303,7 +1304,7 @@ function renderNotebooks(m){
   if(!b){ goTo({view:'nbList'}, true); return; }
   m.innerHTML = `
     <header class="top">
-      <span class="sp"></span>
+      <span class="net-dot ${netOnline() ? 'on' : 'off'}"><i>${netOnline() ? 'آنلاین' : 'آفلاین'}</i></span>
       <button class="title-btn" data-a="nbPickToggle">${esc(b.n)} <span class="caret">${NBPICK ? '▴' : '▾'}</span></button>
       <span class="sp"></span>
     </header>
@@ -2382,7 +2383,7 @@ function renderMain(m){
   m.innerHTML = `
     <header class="top">
       <button class="ic" data-a="menu" aria-label="منو">${ICON.menu}</button>
-      <span class="net-dot ${netOnline() ? 'on' : 'off'}" id="netdot"><i>${netOnline() ? 'آنلاین' : 'آفلاین'}</i></span><span class="title-wrap"><button class="title-btn" data-a="togglePick">${esc(title)} <span class="caret">${V.pick ? '▴' : '▾'}</span></button></span>
+      <span class="net-dot ${netOnline() ? 'on' : 'off'}"><i>${netOnline() ? 'آنلاین' : 'آفلاین'}</i></span><span class="title-wrap"><button class="title-btn" data-a="togglePick">${esc(title)} <span class="caret">${V.pick ? '▴' : '▾'}</span></button></span>
       ${p ? `<button class="arch-hd" data-a="archOpen" data-p="${p.id}">بایگانی</button>` : '<span class="sp"></span>'}
     </header>
     ${(V.pick || !p) ? pickRow(p) : ''}
