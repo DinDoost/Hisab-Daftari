@@ -2642,7 +2642,7 @@ async function lkOk(){
       resetToList();
       return lkUnlock();
     }
-    try{ await cloudLoad(); cloudReady = true; devSync().finally(() => { DEV_AT = 0; loadDevices(); }); }
+    try{ await cloudLoad(); cloudReady = true; devRegister().finally(() => { DEV_AT = 0; loadDevices(); }); }
     catch(e){ LK.err = 'دریافت اطلاعات حساب انجام نشد. اتصال اینترنت را بررسی کنید.'; renderLock(); return; }
     LK.recoveryVerified = true; recClear();
     LK.mode = 'newpass'; LK.f.pass = ''; LK.f.pass2 = ''; renderLock(); return;
@@ -2711,7 +2711,7 @@ async function authLogin(){
     return authErr('ایمیل یا رمز عبور درست نیست. اگر حساب قدیمی دارید، رمز را بازیابی کنید.');
   }
   cloudUser = data.user; cloudReady = false;
-  try{ await cloudLoad(); cloudReady = true; devSync().finally(() => { DEV_AT = 0; loadDevices(); }); }
+  try{ await cloudLoad(); cloudReady = true; devRegister().finally(() => { DEV_AT = 0; loadDevices(); }); }
   catch(e){ await supabaseClient.auth.signOut(); cloudUser = null; return authErr('دریافت اطلاعات حساب از پایگاه داده ناموفق بود. تنظیمات دیتابیس را بررسی کنید.'); }
   S.email = cloudUser.email || mail; S.loggedIn = true;
   delete S.passHash; delete S.reg;
@@ -2865,12 +2865,28 @@ async function deviceRevoked(){
   try{ if(supabaseClient) await supabaseClient.auth.signOut({ scope:'local' }); }catch(e){}
   cloudReady = false; cloudUser = null; clearTimeout(cloudSyncTimer);
   nbReset();
-  S = { cur:'toman', parties:[], email:'', loggedIn:false };
+  S.loggedIn = false;
   try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){}
   LK.locked = true; LK.mode = 'login'; LK.err = 'این دستگاه از حساب خارج شد.'; LK.buf = ''; LK.f = { mail:'', pass:'', pass2:'' };
   render(); renderLock();
 }
 let DEV_BUSY = false;
+let LOGIN_AT = 0;
+/* بعد از ورود با ایمیل و رمز، این دستگاه همیشه دوباره ثبت می‌شود */
+async function devRegister(){
+  LOGIN_AT = Date.now();
+  if(!supabaseClient || !cloudUser || !navigator.onLine) return;
+  const uid = cloudUser.id, did = getDeviceId(), nm = devName(), flag = 'hisab-dev-reg-' + uid;
+  try{
+    const sel = await supabaseClient.from('user_devices').select('device_id').eq('u', uid).eq('device_id', did);
+    if(!sel.error && sel.data && sel.data.length){
+      await supabaseClient.from('user_devices').update({ name:nm, last_seen:new Date().toISOString() }).eq('u', uid).eq('device_id', did);
+    } else {
+      await supabaseClient.from('user_devices').insert({ u:uid, device_id:did, name:nm });
+    }
+    try{ localStorage.setItem(flag, '1'); }catch(e){}
+  }catch(e){ console.warn('device register:', e); }
+}
 async function devSync(){
   if(DEV_BUSY || !supabaseClient || !cloudUser || !navigator.onLine) return;
   DEV_BUSY = true;
@@ -2891,6 +2907,7 @@ async function devSync(){
       return;
     }
     /* لیست دیده می‌شود، دستگاه‌های دیگر در آن هستند، ولی ردیف این دستگاه نیست: این دستگاه حذف شده است */
+    if(Date.now() - LOGIN_AT < 60000) return;
     await deviceRevoked();
   }catch(e){ console.warn('device sync:', e); }
   finally{ DEV_BUSY = false; }
