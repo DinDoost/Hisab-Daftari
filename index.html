@@ -342,14 +342,14 @@ html,body{touch-action:pan-x pan-y;-ms-touch-action:pan-x pan-y}
 .u-menu button{display:block;width:100%;text-align:right;background:none;border:0;border-radius:10px;padding:11px 12px;font-size:14px;font-weight:600;color:var(--text);cursor:pointer}
 .u-menu button:active{background:var(--soft)}
 .u-list{display:flex;flex-direction:column;gap:8px;margin-top:8px;width:100%}
-.u-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:9px 11px}
+.u-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 14px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
 .u-top{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px}
-.u-pct{font-size:12px;font-weight:700;white-space:nowrap}
-.u-bar{height:6px;border-radius:99px;background:var(--soft);margin:7px 0;overflow:hidden}
+.u-pct{font-size:12px;font-weight:700;white-space:nowrap;border-radius:99px;padding:2px 10px}
+.u-bar{height:9px;border-radius:99px;background:var(--soft);margin:10px 0 12px;overflow:hidden}
 .u-bar i{display:block;height:100%;border-radius:99px}
 .u-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center}
 .u-grid small{display:block;color:var(--muted);font-size:11px}
-.u-grid b{display:block;font-size:12px;font-weight:600;line-height:1.5}
+.u-grid b{display:block;font-size:13px;font-weight:600;line-height:1.6}.u-grid .u-main b{font-size:15px;font-weight:800}
 .u-grid em{display:block;font-style:normal;font-size:10px;color:var(--muted)}
 .u-tag{display:inline-block;margin-top:5px;font-size:10px;color:var(--muted);background:var(--soft);border-radius:99px;padding:1px 8px}
 .ka-row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px;padding:6px 6px 0;font-size:13px;color:var(--muted)}
@@ -540,6 +540,13 @@ body:has(#main > .list), body:has(#main > .lg-scroll), body:has(#main > #nbRows)
 .net-dot.on i{color:#16a34a}
 .net-dot.off i{color:#dc2626}
 </style>
+<style>
+.rd-list{display:flex;flex-direction:column;gap:6px;margin:8px 0 4px}
+.rd-row{display:flex;align-items:center;gap:12px;width:100%;background:none;border:0;padding:12px 6px;font:inherit;font-size:15px;color:var(--text);cursor:pointer;text-align:right;direction:rtl}
+.rd-c{width:22px;height:22px;border-radius:50%;border:2px solid var(--muted);flex:0 0 22px;position:relative;box-sizing:border-box}
+.rd-c.on{border-color:#1e9e62}
+.rd-c.on::after{content:'';position:absolute;inset:4px;border-radius:50%;background:#1e9e62}
+</style>
 </head>
 <body>
 <div id="main"></div>
@@ -560,39 +567,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_arQivl2kFFswx0S4WQitMg_wLpnCeLI';
 let supabaseClient = null;
 function makeSupabaseClient(){
   if(!supabaseClient && window.supabase?.createClient)
-    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { fetch: usageFetch } });
-}
-/* شمارش حجم ورودی/خروجی همین گوشی (تخمینی) */
-function usageMonthKey(){ const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1); }
-function usageLocalAdd(field, n){
-  try{
-    const k = 'hisab-usage-local-v1';
-    let o = JSON.parse(localStorage.getItem(k) || '{}');
-    if(o.m !== usageMonthKey()) o = { m: usageMonthKey(), inB: 0, outB: 0, rt: 0 };
-    o[field] = (Number(o[field]) || 0) + n;
-    localStorage.setItem(k, JSON.stringify(o));
-  }catch(e){}
-}
-function usageLocalGet(){
-  try{
-    const o = JSON.parse(localStorage.getItem('hisab-usage-local-v1') || '{}');
-    return o.m === usageMonthKey() ? o : { inB: 0, outB: 0, rt: 0 };
-  }catch(e){ return { inB: 0, outB: 0, rt: 0 }; }
-}
-function usageFetch(input, init){
-  try{
-    const b = init && init.body;
-    if(typeof b === 'string') usageLocalAdd('inB', b.length);
-    else if(b && b.size) usageLocalAdd('inB', b.size);
-  }catch(e){}
-  return fetch(input, init).then(res => {
-    try{
-      const cl = Number(res.headers.get('content-length'));
-      if(cl > 0) usageLocalAdd('outB', cl);
-      else res.clone().blob().then(x => usageLocalAdd('outB', x.size)).catch(() => {});
-    }catch(e){}
-    return res;
-  });
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
 function loadScriptOnce(src){
   return new Promise((res, rej) => {
@@ -1112,7 +1087,15 @@ function playBell(){
     });
   }catch(e){}
 }
-function soundForward(){ if(S.snd === false) return; softTone(480, 640, 0.22, 'sine'); }
+function keyMode(){
+  if(S.keyMode) return S.keyMode === 'off' ? 'off' : 'on';
+  return S.snd === false ? 'off' : 'on';
+}
+function soundForward(){
+  const m = keyMode();
+  if(m === 'off') return;
+  softTone(480, 640, 0.22, 'sine');
+}
 function soundBack(){ soundForward(); }
 
 function resetToList(){
@@ -1406,23 +1389,22 @@ window.addEventListener('online', () => { if(!NBSYNCED && cloudUser) nbLoad(); }
     }));
     location.reload();
   }
-  let waiting = false;
+  /* بروزرسانی فقط با دکمهٔ کاربر انجام می‌شود؛ برنامه خودش صفحه را دوباره باز نمی‌کند */
+  window.appUpdate = function(){
+    if(!window.__newBuild) return;
+    localStorage.setItem(KEY, window.__newBuild);
+    resumeAndReload();
+  };
   async function check(){
-    if(!navigator.onLine) return;
+    if(!navigator.onLine || window.__newBuild) return;
     const b = await buildId();
     if(!b) return;
     const saved = localStorage.getItem(KEY);
     if(!saved){ localStorage.setItem(KEY, b); return; }
     if(saved === b) return;
-    if(busy()){
-      if(!waiting){
-        waiting = true;
-        const t = setInterval(() => { if(!busy()){ clearInterval(t); waiting = false; check(); } }, 3000);
-      }
-      return;
-    }
-    localStorage.setItem(KEY, b);
-    resumeAndReload();
+    window.__newBuild = b;
+    showToast('نسخهٔ جدید برنامه آماده است. از تنظیمات دکمهٔ «بروز کن» را بزنید.', true);
+    if(V.view === 'settings') render();
   }
   setTimeout(check, 4000);
   setInterval(check, 5000);
@@ -1680,29 +1662,26 @@ function renderNow(){
   }
 
   if(V.view === 'settings'){
+    kaLoadOnce();
     m.innerHTML = pageHead('تنظیمات', 'menu') + `
       <div class="st-page">
-      ${BK_PANEL === 'ask' ? '<div style="background:#fff8e6;border:1px solid #e6c46a;border-radius:12px;padding:14px;margin:10px 0;line-height:2">با تأیید، بکاپ‌گیری در پوشه دانلود انجام می‌شود.<br>برای بازیابی اطلاعات، از نسخه آفلاین استفاده کنید: در نسخه آفلاین، از تنظیمات گزینه «بازیابی از فایل پشتیبان» را بزنید و همین فایل را انتخاب کنید.<br><button class="srow-b" style="margin-top:8px" onclick="runBackup()">تأیید</button> <button class="srow-b" style="margin-top:8px" onclick="bkClose(false)">انصراف</button></div>' : ''}
       ${emailSection(4)}
       <div class="srow">
         <button class="srow-b" data-a="pinToggle">پین کد امنیتی: ${S.pin ? 'فعال' : 'غیرفعال'}</button>
         ${S.pin ? '<button class="srow-b" data-a="pinChange">تغییر پین</button>' : ''}
         <button class="srow-b" onclick="showBackupAsk()">پشتیبان‌گیری</button>
-        <button class="srow-b" data-a="soundToggle">صدای کلیدها: ${S.snd === false ? 'غیرفعال شد' : 'فعال شد'}</button>
-        <button class="srow-b" data-a="saveSoundToggle">صدای ثبت تغییرات: ${S.snSave === false ? 'غیرفعال شد' : 'فعال شد'}</button>
+        <button class="srow-b" data-a="keySoundOpen">صدای کلیدها: ${({on:'فعال', off:'خاموش'})[keyMode()]}</button>
+        <button class="srow-b" data-a="saveSoundOpen">صدای ثبت و ویرایش: ${S.snSave === false ? 'خاموش' : 'فعال'}</button>
         <button class="srow-b srow-out" data-a="authLogout">خروج از حساب</button>
         <button class="srow-b" data-a="authOthers">خروج از سایر دستگاه‌ها</button>
-        <button class="srow-b" data-a="usageTable">مصرف ورودی و خروجی و سقف</button>
-        <div class="sec-title" style="margin:14px 4px 6px">دستگاه‌های وارد شده</div>
-        <div id="devlist" style="display:flex;flex-direction:column;gap:8px"><div class="hint">در حال خواندن...</div></div>
-        <div class="ka-row"><b>آخرین بروزرسانی سرور</b><span class="ka-v" id="ka-v">${kaText()}</span></div>
-        <div class="ka-act">${kaBtnHTML()}</div>
+        <button class="srow-b" data-a="usageTable">مصرف و سقف</button>
       </div>
+      <div class="ka-row"><b>آخرین بروزرسانی سرور</b><span class="ka-v" id="ka-v">${kaText()}</span></div>
+      <div class="ka-act">${kaBtnHTML()}</div>
+      ${window.__newBuild ? '<div class="ka-row"><b>نسخهٔ جدید برنامه آماده است</b></div><div class="ka-act"><button type="button" class="ka-btn ok" onclick="appUpdate()">بروز کن</button></div>' : ''}
       </div>
 
 `;
-    kaLoadOnce();
-    loadDevicesOnce();
     return;
   }
 
@@ -2840,6 +2819,24 @@ async function passSave(){
   resetToList();
   lkUnlock();
 }
+/* فهرست دستگاه‌ها یک بار از سرور خوانده و روی همین گوشی نگه داشته می‌شود؛ بعد از آن از همین نسخه نشان داده می‌شود و هر لحظه نمی‌خواند */
+const DEV_CACHE_KEY = 'hisab-dev-cache-v1';
+function devCacheGet(){
+  try{
+    const o = JSON.parse(localStorage.getItem(DEV_CACHE_KEY) || 'null');
+    if(!o || !Array.isArray(o.data)) return null;
+    if(cloudUser && o.u && o.u !== cloudUser.id) return null;
+    return o;
+  }catch(e){ return null; }
+}
+function devCacheSet(data){
+  try{ localStorage.setItem(DEV_CACHE_KEY, JSON.stringify({ u: cloudUser ? cloudUser.id : '', at: new Date().toISOString(), data })); }catch(e){}
+}
+function devCacheClear(){ try{ localStorage.removeItem(DEV_CACHE_KEY); }catch(e){} }
+function devListHTML(list, at){
+  return devRowsHTML(list) + `<div class="hint" style="margin-top:4px">آخرین خواندن: ${esc(at ? kaFmt(at) : '—')}
+    <button type="button" class="btn" data-a="devReload" style="width:auto;padding:4px 12px;font-size:12px;margin-inline-start:8px">به‌روزرسانی</button></div>`;
+}
 /* صفحهٔ دستگاه‌ها: هر دستگاه جدا خارج می‌شود، یا همه دستگاه‌های دیگر با هم */
 function devRowsHTML(list){
   const me = getDeviceId();
@@ -2853,26 +2850,35 @@ function devRowsHTML(list){
     </div>`;
   }).join('') || '<div class="hint">دستگاهی ثبت نشده است.</div>';
 }
+function devSheetPaint(box, list, at, note){
+  const others = list.filter(d => d.device_id !== getDeviceId()).length;
+  box.innerHTML = (note ? `<div class="hint">${esc(note)}</div>` : '') + devRowsHTML(list)
+    + `<div class="hint" style="margin-top:4px">آخرین خواندن: ${esc(at ? kaFmt(at) : '—')}
+        <button type="button" class="btn" data-a="devSheetReload" style="width:auto;padding:4px 12px;font-size:12px;margin-inline-start:8px">به‌روزرسانی</button></div>`
+    + (others ? `<button class="btn danger" data-a="devAllOthers" style="margin-top:10px">خروج از همه دستگاه‌های دیگر (${others})</button>` : '');
+}
 async function devSheetLoad(){
   const box = document.getElementById('devsheet'); if(!box) return;
-  box.innerHTML = '<div class="hint">در حال خواندن...</div>';
+  const c = devCacheGet();
+  if(c) devSheetPaint(box, c.data, c.at, 'در حال به‌روزرسانی...');
+  else box.innerHTML = '<div class="hint">در حال خواندن...</div>';
   const r = await devFetch();
-  if(r.err){ box.innerHTML = `<div class="hint">${esc(r.err)}</div><button type="button" class="btn pri-btn" style="margin-top:8px" onclick="devSheetLoad()">خواندن دوباره</button>`; return; }
+  const box2 = document.getElementById('devsheet'); if(!box2) return;
+  if(r.err){
+    if(c){ devSheetPaint(box2, c.data, c.at, r.err + ' (فهرست ذخیره‌شده نشان داده می‌شود)'); return; }
+    box2.innerHTML = `<div class="hint">${esc(r.err)}</div><button type="button" class="btn pri-btn" style="margin-top:8px" onclick="devSheetLoad()">خواندن دوباره</button>`; return;
+  }
   devHistorySave(r.data);
-  const others = r.data.filter(d => d.device_id !== getDeviceId()).length;
-  box.innerHTML = devRowsHTML(r.data) + (others ? `<button class="btn danger" data-a="devAllOthers" style="margin-top:10px">خروج از همه دستگاه‌های دیگر (${others})</button>` : '');
+  const cc = devCacheGet();
+  devSheetPaint(box2, r.data, cc ? cc.at : new Date().toISOString());
 }
 
 /* ---------- مصرف Supabase: همه موارد یکجا (کارتی، مناسب گوشی) ---------- */
 /* src: db/storage/users = از SQL (دقیق)، local = تخمین همین گوشی */
 const USAGE_CAPS = [
-  { k:'db',   n:'اندازهٔ پایگاه داده',  capTxt:'۵۰۰ مگابایت',  capVal:500,     mode:'size',  src:'sql' },
-  { k:'stor', n:'فضای فایل‌ها (عکس‌ها)', capTxt:'۱ گیگابایت',   capVal:1024,    mode:'size',  src:'sql' },
-  { k:'egr',  n:'خروجی (دانلود)',        capTxt:'۵ گیگابایت',   capVal:5120,    mode:'size',  src:'local' },
-  { k:'ing',  n:'ورودی (ارسال)',         capTxt:'—',            capVal:0,       mode:'size',  src:'local' },
-  { k:'rt',   n:'پیام‌های بلادرنگ',      capTxt:'۲٬۰۰۰٬۰۰۰',    capVal:2000000, mode:'count', src:'local' },
-  { k:'usr',  n:'کاربران ماهانه',        capTxt:'۵۰٬۰۰۰',       capVal:50000,   mode:'count', src:'sql' },
-  { k:'conn', n:'اتصال همزمان پایگاه',   capTxt:'—',            capVal:0,       mode:'count', src:'sql' },
+  { k:'db',   n:'اندازهٔ پایگاه داده',  capTxt:'۵۰۰ مگابایت',  capVal:500,   mode:'size'  },
+  { k:'stor', n:'فضای فایل‌ها (عکس‌ها)', capTxt:'۱ گیگابایت',   capVal:1024,  mode:'size'  },
+  { k:'usr',  n:'کاربران',               capTxt:'۵۰٬۰۰۰',       capVal:50000, mode:'count' },
 ];
 function usageGet(){
   try{ return JSON.parse(localStorage.getItem('hisab-usage-v1') || '{}'); }catch(e){ return {}; }
@@ -2902,47 +2908,56 @@ async function usageRefresh(){
 function fa(n, d){ return (Number(n) || 0).toLocaleString('fa-IR', { maximumFractionDigits: d }); }
 function usageSizeTxt(mb){
   if(mb >= 1024) return fa(mb / 1024, 2) + ' گیگابایت';
-  return fa(mb, 1) + ' مگابایت';
+  if(mb < 1) return fa(mb * 1024, 0) + ' کیلوبایت';
+  return fa(mb, 2) + ' مگابایت';
+}
+/* مقدار دقیق‌تر زیر عدد اصلی: کیلوبایت (یا بایت وقتی کمتر از ۱ مگابایت است) */
+function usageExactTxt(mb){
+  if(mb < 1) return fa(mb * 1048576, 0) + ' بایت';
+  return fa(mb * 1024, 0) + ' کیلوبایت';
 }
 function usageItems(){
-  const u = usageGet(), l = usageLocalGet();
+  const u = usageGet();
   return USAGE_CAPS.map((c, i) => {
-    let raw = null;
-    if(c.k === 'egr') raw = l.outB / 1048576;
-    else if(c.k === 'ing') raw = l.inB / 1048576;
-    else if(c.k === 'rt') raw = l.rt;
-    else raw = (u[c.k] == null ? null : Number(u[c.k]));
+    const raw = u[c.k] == null ? null : Number(u[c.k]);
     const has = raw != null && !isNaN(raw);
     const pct = has && c.capVal ? (raw / c.capVal) * 100 : 0;
     const col = pct >= 90 ? '#c0392b' : pct >= 70 ? '#d98a00' : '#1e9e62';
-    let used = '—', kb = '', rem = '—';
+    let used = '—', kb = '', rem = '—', remKb = '';
     if(has){
+      const left = Math.max(0, c.capVal - raw);
       if(c.mode === 'size'){
-        used = usageSizeTxt(raw);
-        kb = fa(raw * 1024, 0) + ' کیلوبایت';
-        rem = c.capVal ? usageSizeTxt(Math.max(0, c.capVal - raw)) : '—';
+        used = usageSizeTxt(raw); kb = usageExactTxt(raw);
+        rem = usageSizeTxt(left); remKb = usageExactTxt(left);
       }else{
-        used = fa(raw, 0);
-        rem = c.capVal ? fa(Math.max(0, c.capVal - raw), 0) : '—';
+        used = fa(raw, 0); rem = fa(left, 0);
       }
     }
-    const pTxt = !has ? '—' : !c.capVal ? '' : (pct < 1 ? 'کمتر از ۱٪' : fa(pct, 0) + '٪');
-    return { name: fa(i+1,0) + '. ' + c.n, pct, col, used, kb, cap: c.capTxt, rem, pTxt, loc: c.src === 'local' };
+    const pTxt = !has ? '—' : (pct > 0 && pct < 0.01 ? 'کمتر از ۰٫۰۱٪' : fa(pct, 2) + '٪');
+    return { name: fa(i+1,0) + '. ' + c.n, pct, col, used, kb, cap: c.capTxt, rem, remKb, pTxt };
   });
 }
 function usageRowsHTML(){
   const u = usageGet();
   const rows = usageItems().map(it => `<div class="u-card">
-      <div class="u-top"><b>${esc(it.name)}</b><span class="u-pct" style="color:${it.col}">${it.pTxt}</span></div>
-      <div class="u-bar"><i style="width:${Math.min(100, it.pct)}%;background:${it.col}"></i></div>
+      <div class="u-top"><b>${esc(it.name)}</b><span class="u-pct" style="color:${it.col};background:${it.col}1a">${it.pTxt}</span></div>
+      <div class="u-bar"><i style="width:${Math.max(it.pct > 0 ? 1.5 : 0, Math.min(100, it.pct))}%;background:${it.col}"></i></div>
       <div class="u-grid">
-        <div><small>مصرف</small><b>${it.used}</b>${it.kb ? `<em>${it.kb}</em>` : ''}</div>
+        <div class="u-main"><small>مصرف</small><b>${it.used}</b>${it.kb ? `<em>${it.kb}</em>` : ''}</div>
         <div><small>سقف</small><b>${esc(it.cap)}</b></div>
-        <div><small>باقی‌مانده</small><b>${it.rem}</b></div>
-      </div>${it.loc ? '<span class="u-tag">تخمین همین گوشی</span>' : ''}
+        <div><small>باقی‌مانده</small><b>${it.rem}</b>${it.remKb ? `<em>${it.remKb}</em>` : ''}</div>
+      </div>
     </div>`).join('');
-  const at = u.at ? new Date(u.at).toLocaleTimeString('fa-IR', { hour:'2-digit', minute:'2-digit' }) : '—';
-  return `<div class="u-list">${rows}</div><div class="hint" style="margin-top:8px">آخرین خواندن از سرور: ${at}</div>`;
+  const at = u.at ? new Date(u.at).toLocaleDateString('fa-IR') + ' · ' + new Date(u.at).toLocaleTimeString('fa-IR', { hour:'2-digit', minute:'2-digit', second:'2-digit' }) : '—';
+  return `<div class="u-list">${rows}</div>
+    <div class="hint" style="margin-top:8px">آخرین خواندن از سرور: ${at}</div>
+    <button type="button" class="btn pri-btn" data-a="usageReload" style="margin-top:8px;width:100%">به‌روزرسانی از Supabase</button>`;
+}
+async function usageReload(){
+  const bx = document.getElementById('usagebox'); if(!bx) return;
+  const ok = await usageRefresh();
+  bx.innerHTML = usageRowsHTML();
+  if(!ok) showToast('خواندن از سرور انجام نشد. اینترنت را بررسی کنید.', false);
 }
 function usageHead(){
   return `<div class="sh-h u-h">
@@ -2968,7 +2983,7 @@ function usageMenuToggle(){
 }
 function usageTableOpen(){
   openSheet(usageHead() + `
-    <div class="hint">پایگاه داده، فضای فایل‌ها و کاربران از سرور خوانده می‌شود. ورودی، خروجی و پیام‌های بلادرنگ را Supabase از راه API نمی‌دهد؛ اینجا حجم همین گوشی از ابتدای این ماه شمرده می‌شود. عدد کل برنامه در Supabase ← Usage است.</div>
+    <div class="hint">این اعداد مستقیم از Supabase خوانده می‌شود و با داشبورد یکی است. هر بار که این صفحه باز شود دوباره خوانده می‌شود.</div>
     <div id="usagebox">${usageRowsHTML()}</div>`);
   usageRefresh().then(ok => { const bx = document.getElementById('usagebox'); if(bx) bx.innerHTML = usageRowsHTML(); });
 }
@@ -2979,7 +2994,7 @@ async function usageShare(asPdf){
   const font = 'Vazirmatn, Tahoma, sans-serif';
   try{ await document.fonts.load('bold 16px Vazirmatn'); await document.fonts.load('600 14px Vazirmatn'); await document.fonts.load('14px Vazirmatn'); }catch(e){}
   const W = 800, PAD = 40, GAP = 16, TOP = 110;
-  const cardH = it => 24 + 30 + 14 + 10 + 22 + 20 + 30 + (it.kb ? 22 : 0) + (it.loc ? 38 : 0) + 14;
+  const cardH = it => 24 + 30 + 14 + 10 + 22 + 20 + 30 + (it.kb ? 22 : 0) + 14;
   const H = TOP + items.reduce((a, it) => a + cardH(it) + GAP, 0) + 70;
   const Q = 2, cv = document.createElement('canvas');
   cv.width = W * Q; cv.height = H * Q;
@@ -3018,7 +3033,7 @@ async function usageShare(asPdf){
     const fw = Math.max(0, Math.min(100, it.pct)) / 100 * innerW;
     if(fw > 0){ x.fillStyle = it.col; rr(W - PAD - 20 - Math.max(fw, 10), cy - 5, Math.max(fw, 10), 10, 5); x.fill(); }
     cy += 5 + 20;
-    const cols = [['مصرف', it.used, it.kb], ['سقف', it.cap, ''], ['باقی‌مانده', it.rem, '']];
+    const cols = [['مصرف', it.used, it.kb], ['سقف', it.cap, ''], ['باقی‌مانده', it.rem, it.remKb]];
     cols.forEach((cl, i) => {
       const cx = rightEdge - colW * (i + 0.5);
       x.textAlign = 'center'; x.fillStyle = '#64748b'; x.font = `14px ${font}`;
@@ -3027,14 +3042,6 @@ async function usageShare(asPdf){
       x.fillText(String(cl[1]), cx, cy + 28);
       if(cl[2]){ x.fillStyle = '#64748b'; x.font = `13px ${font}`; x.fillText(cl[2], cx, cy + 52); }
     });
-    if(it.loc){
-      const ty = y + h - 14 - 12;
-      x.font = `13px ${font}`;
-      const tw = x.measureText('تخمین همین گوشی').width + 24;
-      x.fillStyle = '#e6edf8'; rr(W - PAD - 20 - tw, ty - 12, tw, 24, 12); x.fill();
-      x.textAlign = 'center'; x.fillStyle = '#64748b';
-      x.fillText('تخمین همین گوشی', W - PAD - 20 - tw / 2, ty);
-    }
     y += h + GAP;
   });
   x.textAlign = 'right'; x.fillStyle = '#64748b'; x.font = `14px ${font}`;
@@ -3061,9 +3068,12 @@ async function usageShare(asPdf){
 }
 
 async function authOthers(){
-  if(!navigator.onLine){ showToast('اینترنت قطع است. اینترنت را روشن کنید.'); return; }
-  openSheet(sheetHead('دستگاه‌های وارد شده') + '<div id="devsheet"><div class="hint">در حال خواندن...</div></div>');
+  if(!navigator.onLine && !devCacheGet()){ showToast('اینترنت قطع است. اینترنت را روشن کنید.'); return; }
+  openSheet(sheetHead('دستگاه‌های وارد شده')
+    + '<div id="devsheet"><div class="hint">در حال خواندن...</div></div>'
+  );
   devSheetLoad();
+  kaLoadOnce();
 }
 /* تاریخ ورود و آخرین فعالیت هر دستگاه را روی همین گوشی ثبت می‌کنیم تا حتی بعد از حذف دستگاه، سابقه بماند */
 function devHistorySave(list){
@@ -3111,6 +3121,7 @@ function devName(){
 /* وقتی این دستگاه از لیست حذف شده باشد، همین‌جا از حساب خارج می‌شود */
 async function deviceRevoked(){
   try{ if(supabaseClient) await supabaseClient.auth.signOut({ scope:'local' }); }catch(e){}
+  devCacheClear();
   cloudReady = false; cloudUser = null; clearTimeout(cloudSyncTimer);
   nbReset();
   S.loggedIn = false;
@@ -3120,6 +3131,16 @@ async function deviceRevoked(){
 }
 let DEV_BUSY = false;
 let LOGIN_AT = 0;
+/* هر ویرایش ردیف در پایگاه داده نسخهٔ قدیمی آن را پر از اطلاعات زائد می‌کند و حجم بالا می‌رود؛ پس زمان آخرین فعالیت را حداکثر هر ۳۰ دقیقه یک بار می‌نویسیم */
+function devSeenDue(uid, did){
+  try{
+    const k = 'hisab-seen-' + uid + '-' + did;
+    const last = Number(localStorage.getItem(k) || 0);
+    if(Date.now() - last < 30 * 60 * 1000) return false;
+    localStorage.setItem(k, String(Date.now()));
+    return true;
+  }catch(e){ return true; }
+}
 /* بعد از ورود با ایمیل و رمز، این دستگاه همیشه دوباره ثبت می‌شود */
 async function devRegister(){
   LOGIN_AT = Date.now();
@@ -3128,7 +3149,7 @@ async function devRegister(){
   try{
     const sel = await supabaseClient.from('user_devices').select('device_id').eq('u', uid).eq('device_id', did);
     if(!sel.error && sel.data && sel.data.length){
-      await supabaseClient.from('user_devices').update({ name:nm, last_seen:new Date().toISOString() }).eq('u', uid).eq('device_id', did);
+      if(devSeenDue(uid, did)) await supabaseClient.from('user_devices').update({ name:nm, last_seen:new Date().toISOString() }).eq('u', uid).eq('device_id', did);
     } else {
       await supabaseClient.from('user_devices').insert({ u:uid, device_id:did, name:nm });
     }
@@ -3146,7 +3167,7 @@ async function devSync(){
     const ids = sel.data.map(r => r.device_id);
     if(ids.includes(did)){
       try{ localStorage.setItem(flag, '1'); }catch(e){}
-      await supabaseClient.from('user_devices').update({ name:nm, last_seen:new Date().toISOString() }).eq('u', uid).eq('device_id', did);
+      if(devSeenDue(uid, did)) await supabaseClient.from('user_devices').update({ name:nm, last_seen:new Date().toISOString() }).eq('u', uid).eq('device_id', did);
       return;
     }
     if(!localStorage.getItem(flag) || ids.length === 0){
@@ -3177,21 +3198,29 @@ async function devFetch(){
   const r = await withTimeoutSoft(supabaseClient.from('user_devices')
     .select('device_id,name,created_at,last_seen').eq('u', cloudUser.id).order('last_seen', { ascending:false }), 10000);
   if(!r || r.error || !r.data) return { err:'خواندن لیست انجام نشد.' };
+  devCacheSet(r.data);
   return { data: r.data };
 }
-async function loadDevices(){
-  const box = document.getElementById('devlist'); if(!box) return;
-  box.innerHTML = '<div class="hint">در حال خواندن...</div>';
+async function loadDevices(manual){
+  const hasBox = () => document.getElementById('devlist');
+  const c = devCacheGet();
+  if(hasBox() && (manual || !c)) hasBox().innerHTML = '<div class="hint">در حال خواندن...</div>';
   const r = await devFetch();
+  const box = hasBox(); if(!box) return;
   if(r.err){
     DEV_AT = 0;
-    box.innerHTML = `<div class="hint">${esc(r.err)}</div><button type="button" class="btn pri-btn" style="margin-top:8px" onclick="loadDevices()">خواندن دوباره</button>`;
+    if(c){ box.innerHTML = `<div class="hint">${esc(r.err)}</div>` + devListHTML(c.data, c.at); return; }
+    box.innerHTML = `<div class="hint">${esc(r.err)}</div><button type="button" class="btn pri-btn" style="margin-top:8px" onclick="loadDevices(true)">خواندن دوباره</button>`;
     return;
   }
-  box.innerHTML = devRowsHTML(r.data);
+  const cc = devCacheGet();
+  box.innerHTML = devListHTML(r.data, cc ? cc.at : new Date().toISOString());
 }
 let DEV_AT = 0;
 function loadDevicesOnce(){
+  const box = document.getElementById('devlist'); if(!box) return;
+  const c = devCacheGet();
+  if(c){ box.innerHTML = devListHTML(c.data, c.at); return; }
   if(Date.now() - DEV_AT < 20000) return;
   DEV_AT = Date.now();
   loadDevices();
@@ -3208,6 +3237,7 @@ async function devRemove(devId){
 async function authLogout(){
   if(!confirm('از حساب خارج می‌شوید؟')) return;
   if(supabaseClient) await supabaseClient.auth.signOut();
+  devCacheClear();
   cloudReady = false; cloudUser = null; clearTimeout(cloudSyncTimer);
   nbReset();
   S = { cur:'toman', parties:[], email:'', loggedIn:false };
@@ -3273,6 +3303,15 @@ function closeSheet(){
 }
 function sheetHead(title){
   return `<div class="sh-h"><span>${title}</span><button class="ic" data-a="close" aria-label="بستن">${ICON.close}</button></div>`;
+}
+function radioRows(opts, cur, action){
+  return '<div class="rd-list">' + opts.map(([v, l]) => `<button type="button" class="rd-row" data-a="${action}" data-v="${v}"><span class="rd-c ${cur === v ? 'on' : ''}"></span><span>${l}</span></button>`).join('') + '</div>';
+}
+function keySoundSheet(){
+  openSheet(sheetHead('صدای کلیدها') + radioRows([['on','فعال'],['off','خاموش']], keyMode(), 'keyModeSet'));
+}
+function saveSoundSheet(){
+  openSheet(sheetHead('صدای ثبت و ویرایش') + radioRows([['on','فعال'],['off','خاموش']], S.snSave === false ? 'off' : 'on', 'saveModeSet'));
 }
 function val(id){ const el = document.getElementById(id); return el ? el.value : ''; }
 
@@ -4567,10 +4606,13 @@ document.addEventListener('click', async e => {
     case 'authLogout': authLogout(); break;
     case 'authOthers': authOthers(); break;
     case 'usageTable': usageTableOpen(); break;
+    case 'usageReload': usageReload(); break;
     case 'usageMenu': usageMenuToggle(); break;
     case 'usageShareImg': usageShare(false); break;
     case 'usageSharePdf': usageShare(true); break;
     case 'devRemove': devRemove(el.dataset.d); break;
+    case 'devReload': DEV_AT = 0; loadDevices(true); break;
+    case 'devSheetReload': devSheetLoad(); break;
     case 'devAllOthers': devAllOthers(); break;
     case 'authToSignup': LK.mode = 'login'; LK.err = 'ثبت‌نام عمومی بسته است.'; renderLock(); break;
     case 'authToLogin': readF(); LK.mode = 'login'; LK.err = ''; renderLock(); break;
@@ -5022,13 +5064,20 @@ document.addEventListener('click', async e => {
     case 'doArch': setArchived(c.id, el.dataset.v === '1'); playBell(); closeSheet(); goTo({view:'list', openId:p.id}, true); break;
     case 'archOpen': goTo({view:'archive', openId:p.id}); break;
     case 'archBack': history.back(); break;
-    case 'saveSoundToggle': {
-      const wasOn = S.snSave !== false;
-      S.snSave = !wasOn;
-      if(wasOn) S.snd = false;
-      save(); if(!wasOn) playBell(); render(); break;
+    case 'saveSoundOpen': saveSoundSheet(); break;
+    case 'saveModeSet': {
+      const on = el.dataset.v === 'on';
+      S.snSave = on; save();
+      if(on) playBell();
+      closeSheet(); render(); break;
     }
-    case 'soundToggle': S.snd = S.snd === false; save(); if(S.snd) playBell(); render(); break;
+    case 'keySoundOpen': keySoundSheet(); break;
+    case 'keyModeSet': {
+      const m = el.dataset.v;
+      S.keyMode = m; S.snd = m !== 'off'; save();
+      if(m === 'on') softTone(480, 640, 0.22, 'sine');
+      closeSheet(); render(); break;
+    }
     case 'lgCurOpen': V.lgOpen = !V.lgOpen; render(); break;
     case 'lgCur': S.lgCur = el.dataset.v; V.lgOpen = false; save(); playBell(); render(); break;
     case 'cDelTx':
@@ -5301,7 +5350,6 @@ function startLive(){
   }catch(e){ console.warn('realtime:', e); }
 }
 function liveKick(){
-  usageLocalAdd('rt', 1);
   clearTimeout(LIVE_T);
   LIVE_T = setTimeout(liveRefresh, 400);
 }
@@ -5379,10 +5427,16 @@ async function initCloudSession(){
 /* ---- پشتیبان‌گیری: فایل در پوشهٔ دانلود ذخیره می‌شود ---- */
 let BK_PANEL = '';
 function showBackupAsk(){
-  BK_PANEL = 'ask';
-  history.pushState({ bk:1 }, '');
-  render();
+  let d = document.getElementById('bk-dlg');
+  if(!d){ d = document.createElement('div'); d.id = 'bk-dlg'; document.body.appendChild(d); }
+  d.innerHTML = '<div onclick="if(event.target===this)closeBk()" style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);display:flex;align-items:flex-start;justify-content:center;padding:72px 16px 16px;box-sizing:border-box">'
+    + '<div style="background:#fff;color:#1f2937;border-radius:18px;padding:18px;width:100%;max-width:420px;box-sizing:border-box;direction:rtl">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:17px;margin-bottom:12px"><span>پشتیبان‌گیری</span><button onclick="closeBk()" style="border:0;background:none;font-size:20px;cursor:pointer;color:#1f2937">✕</button></div>'
+    + '<div style="background:#fff8e6;border:1px solid #e6c46a;border-radius:12px;padding:14px;line-height:2;font-size:15px">با تأیید، بکاپ‌گیری در پوشه دانلود انجام می‌شود.<br>برای بازیابی اطلاعات، از نسخه آفلاین استفاده کنید: در نسخه آفلاین، از تنظیمات گزینه «بازیابی از فایل پشتیبان» را بزنید و همین فایل را انتخاب کنید.</div>'
+    + '<div style="display:flex;gap:8px;margin-top:14px"><button class="srow-b" onclick="runBackup()" style="flex:1">تأیید</button><button class="srow-b" onclick="closeBk()" style="flex:1">انصراف</button></div>'
+    + '</div></div>';
 }
+function closeBk(){ const d = document.getElementById('bk-dlg'); if(d) d.innerHTML = ''; }
 /* بستن پنل؛ اگر از دکمهٔ برگشت گوشی آمده باشد، دوباره history.back نمی‌زند */
 function bkClose(fromPop){
   if(!BK_PANEL) return;
@@ -5429,7 +5483,7 @@ async function runBackup(){
   a.href = url; a.download = fname;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
-  bkClose(false);
+  closeBk(); render();
   showToast('پکاپ گیری با موفقیت در پوشه دانلود انجام شد', true);
 }
 
