@@ -338,8 +338,12 @@ html,body{touch-action:pan-x pan-y;-ms-touch-action:pan-x pan-y}
 .ka-row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px;padding:6px 6px 0;font-size:13px;color:var(--muted)}
 .ka-row b{font-weight:600;color:var(--text)}
 .ka-row .ka-v{direction:rtl;text-align:left}
-.ka-row .ka-v.ok{color:var(--pos)}
-.ka-row .ka-v.old{color:var(--neg)}
+.ka-v{transition:color .4s}
+.ka-v.flash{color:#1e9e62;font-weight:600}
+.ka-act{display:flex;justify-content:flex-start;margin:10px 6px 0}
+.ka-btn{border:0;color:#fff;font:inherit;font-size:13px;font-weight:700;padding:8px 16px;min-width:96px;border-radius:999px;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,.12)}
+.ka-btn.ok{background:#1e9e62}
+.ka-btn.bad{background:#c0392b}
 .mail-ok{display:inline-flex;align-items:center;gap:4px;flex:none;color:#1e7a4c;font-size:11px;font-weight:700;white-space:nowrap}
 .mail-ok svg{width:14px;height:14px;stroke:#1e7a4c;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
 .mail-txt small{color:var(--muted);font-size:13px;direction:ltr;text-align:left;overflow-wrap:anywhere;word-break:break-all;white-space:normal}
@@ -567,12 +571,19 @@ const SUPA_READY = (async () => {
 let cloudUser = null, cloudReady = false, cloudSyncTimer = null;
 let LIVE_OK = false;   /* آیا اتصال زنده با سرور برقرار است */
 function netOnline(){ return !!(navigator.onLine && cloudUser && cloudReady && LIVE_OK); }
+let NET_WAS_ON = false;
 function updateNetDot(){
   const on = netOnline();
   document.querySelectorAll('.net-dot').forEach(el => {
     el.className = 'net-dot ' + (on ? 'on' : 'off');
     const t = el.querySelector('i'); if(t) t.textContent = on ? 'آنلاین' : 'آفلاین';
   });
+  if(on && !NET_WAS_ON){
+    const el = document.getElementById('ka-v');
+    if(el){ el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 2500); }
+  }
+  NET_WAS_ON = on;
+  if(typeof kaPaint === 'function') kaPaint();
 }
 let cloudSyncing = false, cloudSyncAgain = false;
 let ledgerCloudOk = true, ledgerWarned = false, ledgerStrict = false, lastLedgerErr = '';
@@ -1635,6 +1646,7 @@ function renderNow(){
         <div class="sec-title" style="margin:14px 4px 6px">دستگاه‌های وارد شده</div>
         <div id="devlist" style="display:flex;flex-direction:column;gap:8px"><div class="hint">در حال خواندن...</div></div>
         <div class="ka-row"><b>آخرین بروزرسانی سرور</b><span class="ka-v" id="ka-v">${kaText()}</span></div>
+        <div class="ka-act">${kaBtnHTML()}</div>
       </div>
       </div>
 
@@ -2803,6 +2815,7 @@ async function devSheetLoad(){
 async function authOthers(){
   if(!supabaseClient || !cloudUser){ showToast('برای این کار باید به اینترنت وصل و وارد حساب باشید.'); return; }
   openSheet(sheetHead('دستگاه‌های وارد شده') + '<div id="devsheet"><div class="hint">در حال خواندن...</div></div>');
+  DEV_AT = 0; loadDevices();
   devSheetLoad();
 }
 async function devAllOthers(){
@@ -2852,18 +2865,21 @@ async function devSync(){
   try{
     const uid = cloudUser.id, did = getDeviceId(), nm = devName();
     const flag = 'hisab-dev-reg-' + uid;
-    const { data, error } = await supabaseClient.from('user_devices')
-      .update({ name:nm, last_seen:new Date().toISOString() })
-      .eq('u', uid).eq('device_id', did).select('id');
-    if(error) return;
-    if(data && data.length) return;
+    /* فقط خواندن: اگر خواندن خطا بدهد (اینترنت، سیاست دسترسی و...) هرگز خارج نمی‌شویم */
+    const sel = await supabaseClient.from('user_devices').select('device_id').eq('u', uid).eq('device_id', did);
+    if(sel.error) return;
+    if(sel.data && sel.data.length){
+      try{ localStorage.setItem(flag, '1'); }catch(e){}
+      await supabaseClient.from('user_devices').update({ name:nm, last_seen:new Date().toISOString() }).eq('u', uid).eq('device_id', did);
+      return;
+    }
     if(!localStorage.getItem(flag)){
       const ins = await supabaseClient.from('user_devices').insert({ u:uid, device_id:did, name:nm });
       if(!ins.error){ try{ localStorage.setItem(flag, '1'); }catch(e){} }
       return;
     }
-    /* قبلاً ثبت شده بود و حالا ردیفش نیست: از طرف دستگاه دیگر حذف شده */
-    await deviceRevoked();
+    /* ردیف این دستگاه دیده نمی‌شود. برای جلوگیری از خروج ناخواسته، دیگر به‌خودی‌خود از حساب خارج نمی‌شویم */
+    return;
   }catch(e){ console.warn('device sync:', e); }
   finally{ DEV_BUSY = false; }
 }
@@ -2886,6 +2902,7 @@ async function loadDevices(){
 }
 let DEV_AT = 0;
 function loadDevicesOnce(){
+  if(!supabaseClient || !cloudUser){ loadDevices(); return; }
   if(Date.now() - DEV_AT < 20000) return;
   DEV_AT = Date.now();
   loadDevices();
@@ -3537,14 +3554,41 @@ function kaText(){
   if(KA.state === 'none' || !KA.t) return 'هنوز بروز نشده';
   return kaFmt(KA.t);
 }
+/* سبز: آنلاین، یا اینکه آخرین بروزرسانی سرور خوانده شده و اینترنت وصل است (برنامه تراکنش‌ها را انجام می‌دهد) */
+function kaOn(){ return !!navigator.onLine && (netOnline() || (KA.state === 'ok' && !!KA.t)); }
+function kaBtnHTML(){
+  const on = kaOn();
+  return `<button type="button" class="ka-btn ${on ? 'ok' : 'bad'}" id="ka-dot" onclick="kaRetry()">${on ? 'آنلاین' : 'وصل شو'}</button>`;
+}
 function kaPaint(){
-  const el = document.getElementById('ka-v'); if(!el) return;
-  el.textContent = kaText();
-  el.classList.remove('ok','old');
-  if(KA.state === 'ok' && KA.t){
-    const age = Date.now() - new Date(KA.t).getTime();
-    el.classList.add(age > 3 * 86400000 ? 'old' : 'ok');
+  const el = document.getElementById('ka-v'), dot = document.getElementById('ka-dot');
+  if(el) el.textContent = kaText();
+  if(dot){
+    const on = kaOn();
+    dot.textContent = on ? 'آنلاین' : 'وصل شو';
+    dot.classList.toggle('ok', on); dot.classList.toggle('bad', !on);
   }
+}
+/* دکمهٔ قرمز: دستی دوباره به سرور وصل می‌شود */
+async function kaRetry(){
+  KA_AT = 0; KA_BUSY = false;
+  KA.state = 'loading'; kaPaint();
+  try{
+    if(!navigator.onLine) throw new Error('offline');
+    await ensureCloudUser();
+    if(!cloudUser) throw new Error('no session');
+    /* اتصال زنده را از نو برقرار می‌کنیم */
+    if(LIVE_CH){ try{ supabaseClient.removeChannel(LIVE_CH); }catch(e){} }
+    LIVE_CH = null; LIVE_UID = null; LIVE_OK = false;
+    await cloudLoad();
+    cloudReady = true;
+    startLive();
+    devSync();
+  }catch(e){ console.warn('manual reconnect:', e); }
+  KA_BUSY = false;
+  await kaLoad();
+  updateNetDot();
+  DEV_AT = 0; loadDevices();
 }
 function nbNoteEditHTML(x){
   return sheetHead('ویرایش یادداشت') + `
@@ -3567,7 +3611,7 @@ async function kaLoad(){
   if(KA_BUSY) return;
   KA_BUSY = true;
   if(!cloudUser) await ensureCloudUser();
-  if(!supabaseClient || !cloudUser){ KA.state = 'err'; kaPaint(); KA_BUSY = false; return; }
+  if(!navigator.onLine || !supabaseClient || !cloudUser){ KA.state = 'err'; kaPaint(); KA_BUSY = false; return; }
   /* اگر قبلاً زمان را داریم، دوباره «در حال خواندن» نشان نمی‌دهیم */
   if(!KA.t) { KA.state = 'loading'; kaPaint(); }
   try{
@@ -3575,10 +3619,12 @@ async function kaLoad(){
     if(error) throw error;
     if(data && data.last_ping){ KA.t = data.last_ping; KA.state = 'ok'; }
     else{ KA.t = null; KA.state = 'none'; }
-  }catch(e){ console.warn('keepalive read:', e); KA.state = 'none'; }
+  }catch(e){ console.warn('keepalive read:', e); KA.state = 'err'; }
   KA_BUSY = false;
   if(V.view === 'settings') kaPaint();
 }
+window.addEventListener('online', () => { if(S.loggedIn && cloudUser) kaRetry(); else kaPaint(); });
+window.addEventListener('offline', () => { KA.state = 'err'; kaPaint(); });
 const CB_MONTHS = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
 const PORTAL_PHONE_KEY = 'hisab_portal_phone';
 function fitMiniNames(){
