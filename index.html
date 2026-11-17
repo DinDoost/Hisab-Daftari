@@ -528,9 +528,35 @@ const KEY = 'hesab-daftari-v1';
 const SUPABASE_URL = 'https://kwkimleeyuhfjhxfimni.supabase.co';
 const AUTH_REDIRECT_URL = 'https://dindoost.github.io/hisab.dari/';
 const SUPABASE_ANON_KEY = 'sb_publishable_arQivl2kFFswx0S4WQitMg_wLpnCeLI';
-const supabaseClient = window.supabase?.createClient
-  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-  : null;
+let supabaseClient = null;
+function makeSupabaseClient(){
+  if(!supabaseClient && window.supabase?.createClient)
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+}
+/* اگر کتابخانه از CDN اول نیامد، از چند منبع دیگر امتحان می‌شود */
+function loadScriptOnce(src){
+  return new Promise((res, rej) => {
+    const el = document.createElement('script');
+    el.src = src;
+    const t = setTimeout(() => { el.remove(); rej(new Error('timeout')); }, 8000);
+    el.onload = () => { clearTimeout(t); res(); };
+    el.onerror = () => { clearTimeout(t); el.remove(); rej(new Error('error')); };
+    document.head.appendChild(el);
+  });
+}
+const SUPA_SOURCES = [
+  'https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js',
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js'
+];
+const SUPA_READY = (async () => {
+  makeSupabaseClient();
+  if(supabaseClient) return;
+  for(const src of SUPA_SOURCES){
+    try{ await loadScriptOnce(src); }catch(e){ continue; }
+    makeSupabaseClient();
+    if(supabaseClient) return;
+  }
+})();
 let cloudUser = null, cloudReady = false, cloudSyncTimer = null;
 let cloudSyncing = false, cloudSyncAgain = false;
 let ledgerCloudOk = true, ledgerWarned = false, ledgerStrict = false, lastLedgerErr = '';
@@ -1177,12 +1203,25 @@ function withTimeoutSoft(p, ms){
   return Promise.race([Promise.resolve(p).catch(() => null), new Promise(r => setTimeout(() => r(null), ms))]);
 }
 /* تازه‌سازی نشست در پس‌زمینه: وقتی اینترنت هست، توکن تازه گرفته می‌شود تا برنامه ساعت‌ها آفلاین هم کار کند */
-async function renewSessionQuiet(){
-  if(!supabaseClient || !cloudUser || !navigator.onLine) return;
-  try{ await withTimeoutSoft(supabaseClient.auth.refreshSession(), 8000); }catch(e){}
+/* بررسی نشست: یک درخواست در هر لحظه. getSession توکن منقضی را خودش تازه می‌کند.
+   اگر اینترنت نباشد یا پاسخ نیاید، نشست فعلی نگه داشته می‌شود و هیچ‌وقت پاک نمی‌شود. */
+let SESS_P = null;
+async function ensureCloudUser(){
+  if(!supabaseClient) return cloudUser;
+  if(SESS_P) return SESS_P;
+  SESS_P = (async () => {
+    try{
+      const r = await withTimeoutSoft(supabaseClient.auth.getSession(), 10000);
+      const u = r?.data?.session?.user || null;
+      if(u) cloudUser = u;
+      return cloudUser;
+    } finally { SESS_P = null; }
+  })();
+  return SESS_P;
 }
-window.addEventListener('online', () => setTimeout(renewSessionQuiet, 500));
-document.addEventListener('visibilitychange', () => { if(!document.hidden) renewSessionQuiet(); });
+window.addEventListener('online', () => setTimeout(ensureCloudUser, 500));
+document.addEventListener('visibilitychange', () => { if(!document.hidden) ensureCloudUser(); });
+setInterval(() => { if(!document.hidden && navigator.onLine) ensureCloudUser(); }, 5 * 60 * 1000);
 /* اگر نشست زنده نیست (آفلاین یا توکن منقضی)، دفترچه‌ها از کش همان حساب خوانده شوند */
 function nbFromCache(){
   if(cloudUser) return;
@@ -1302,7 +1341,7 @@ function renderNotebooks(m){
 }
 /* با برگشتن اینترنت فقط وقتی دوباره می‌خواند که خواندن اولِ باز شدن برنامه ناموفق بوده؛ در غیر این صورت چیزی نمی‌خواند */
 window.addEventListener('online', () => {
-  if(cloudUser && !cloudReady){ CLOUD_TRIES = 0; setTimeout(refreshCloudQuiet, 1000); }
+  if(S.loggedIn && !cloudReady){ CLOUD_TRIES = 0; setTimeout(refreshCloudQuiet, 1000); }
   else if(!NBSYNCED) nbLoad();
 });
 /* بروزرسانی خودکار: اگر فایل جدید در سرور باشد، بدون کشیدن صفحه، برنامه خودش بروز می‌شود */
@@ -3380,7 +3419,7 @@ function ledgerFormHTML(){
 }
 function ledgerFresh(){ return { type:'out', amt:'', desc:'', date:todayStr(), hh:new Date().getHours(), mm:new Date().getMinutes(), err:'', editId:null, sel:null }; }
 /* ---------- آخرین بروزرسانی سرور (نگه‌دارندهٔ Supabase) ---------- */
-let KA = { t:null, state:'idle' };   /* idle | loading | ok | none | err */
+let KA = { t:null, state:'idle', reason:'' };   /* idle | loading | ok | none | err */
 function kaFmt(iso){
   try{
     const d = new Date(iso);
@@ -3391,7 +3430,7 @@ function kaFmt(iso){
 }
 function kaText(){
   if(KA.state === 'loading' || KA.state === 'idle') return 'در حال خواندن...';
-  if(KA.state === 'err') return 'خوانده نشد';
+  if(KA.state === 'err') return 'خوانده نشد' + (KA.reason ? ' (' + KA.reason + ')' : '');
   if(KA.state === 'none' || !KA.t) return 'هنوز بروز نشده';
   return kaFmt(KA.t);
 }
@@ -3424,15 +3463,15 @@ function kaLoadOnce(){
 async function kaLoad(){
   if(KA_BUSY) return;
   KA_BUSY = true;
-  if(!supabaseClient || !cloudUser){ KA.state = 'err'; kaPaint(); KA_BUSY = false; return; }
+  if(!supabaseClient || !cloudUser){ KA.state = 'err'; KA.reason = !supabaseClient ? 'کتابخانه نیامد' : 'نشست نیست'; kaPaint(); KA_BUSY = false; return; }
   /* اگر قبلاً زمان را داریم، دوباره «در حال خواندن» نشان نمی‌دهیم */
   if(!KA.t) { KA.state = 'loading'; kaPaint(); }
   try{
     const { data, error } = await supabaseClient.from('keepalive').select('last_ping').eq('id', 1).maybeSingle();
     if(error) throw error;
-    if(data && data.last_ping){ KA.t = data.last_ping; KA.state = 'ok'; }
+    KA.reason = ''; if(data && data.last_ping){ KA.t = data.last_ping; KA.state = 'ok'; }
     else{ KA.t = null; KA.state = 'none'; }
-  }catch(e){ console.warn('keepalive read:', e); KA.state = 'none'; }
+  }catch(e){ console.warn('keepalive read:', e); KA.state = 'err'; KA.reason = (e && (e.message || e.code)) || 'خطا'; }
   KA_BUSY = false;
   if(V.view === 'settings') kaPaint();
 }
@@ -4726,7 +4765,7 @@ history.replaceState({v:V}, '');
 render();
 renderLock();
 let recoveryAuthSeen = false;
-if(supabaseClient){
+SUPA_READY.then(() => { if(supabaseClient){
   supabaseClient.auth.onAuthStateChange((event, session) => {
     if(event === 'PASSWORD_RECOVERY' && session?.user){
       recoveryAuthSeen = true;
@@ -4738,7 +4777,7 @@ if(supabaseClient){
       renderLock();
     }
   });
-}
+} });
 
 function storedSessionUser(){
   try{
@@ -4755,7 +4794,9 @@ function storedSessionUser(){
 }
 let CLOUD_TRIES = 0;
 async function refreshCloudQuiet(){
-  if(!cloudUser || cloudReady) return;
+  if(cloudReady) return;
+  await ensureCloudUser();
+  if(!cloudUser){ if(S.loggedIn && CLOUD_TRIES++ < 21) setTimeout(refreshCloudQuiet, Math.min(60000, 3000 * CLOUD_TRIES)); return; }
   /* دفترچه‌ها و تنظیم پیش‌فرض جدا از بارگذاری طرف حساب‌ها خوانده می‌شوند تا خطای یکی، بقیه را متوقف نکند */
   let ok = false;
   try{
@@ -4766,7 +4807,7 @@ async function refreshCloudQuiet(){
   }
   if(!ok){
     /* اگر بارگذاری ناموفق بود، چند بار دیگر امتحان می‌کنیم؛ چیزی را به‌عنوان «همگام‌شده» علامت نمی‌زنیم */
-    if(CLOUD_TRIES++ < 6 && cloudUser) setTimeout(refreshCloudQuiet, 3000);
+    if(S.loggedIn && CLOUD_TRIES++ < 21) setTimeout(refreshCloudQuiet, Math.min(60000, 3000 * CLOUD_TRIES));
     return;
   }
   try{ await nbLoad(); }catch(e){ console.warn('notebooks load:', e); }
@@ -4861,7 +4902,6 @@ async function initCloudSession(){
     renderLock(); return;
   }
   cloudUser = sessUser; cloudReady = false;
-  renewSessionQuiet();
   nbUseUser();
   S.loggedIn = true; delete S.passHash; delete S.reg;
   LK.f.mail = S.email || cloudUser.email || '';
@@ -4931,7 +4971,7 @@ async function runBackup(){
   showToast('پکاپ گیری با موفقیت در پوشه دانلود انجام شد', true);
 }
 
-initCloudSession();
+SUPA_READY.then(() => initCloudSession());
 </script>
 </body>
 </html>
