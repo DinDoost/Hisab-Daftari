@@ -335,6 +335,23 @@ html,body{touch-action:pan-x pan-y;-ms-touch-action:pan-x pan-y}
 .st-page .mail-txt b{font-size:13px}
 .st-page .mail-txt small{font-size:12px}
 .st-page .mail-ok{font-size:11px}
+.u-h{position:relative}
+.u-dots-wrap{position:relative}
+.u-menu{position:absolute;top:100%;right:0;min-width:170px;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 26px rgba(0,0,0,.16);padding:6px;z-index:20}
+.u-menu.hidden{display:none}
+.u-menu button{display:block;width:100%;text-align:right;background:none;border:0;border-radius:10px;padding:11px 12px;font-size:14px;font-weight:600;color:var(--text);cursor:pointer}
+.u-menu button:active{background:var(--soft)}
+.u-list{display:flex;flex-direction:column;gap:8px;margin-top:8px;width:100%}
+.u-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:9px 11px}
+.u-top{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px}
+.u-pct{font-size:12px;font-weight:700;white-space:nowrap}
+.u-bar{height:6px;border-radius:99px;background:var(--soft);margin:7px 0;overflow:hidden}
+.u-bar i{display:block;height:100%;border-radius:99px}
+.u-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center}
+.u-grid small{display:block;color:var(--muted);font-size:11px}
+.u-grid b{display:block;font-size:12px;font-weight:600;line-height:1.5}
+.u-grid em{display:block;font-style:normal;font-size:10px;color:var(--muted)}
+.u-tag{display:inline-block;margin-top:5px;font-size:10px;color:var(--muted);background:var(--soft);border-radius:99px;padding:1px 8px}
 .ka-row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px;padding:6px 6px 0;font-size:13px;color:var(--muted)}
 .ka-row b{font-weight:600;color:var(--text)}
 .ka-row .ka-v{direction:rtl;text-align:left}
@@ -543,7 +560,39 @@ const SUPABASE_ANON_KEY = 'sb_publishable_arQivl2kFFswx0S4WQitMg_wLpnCeLI';
 let supabaseClient = null;
 function makeSupabaseClient(){
   if(!supabaseClient && window.supabase?.createClient)
-    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { fetch: usageFetch } });
+}
+/* شمارش حجم ورودی/خروجی همین گوشی (تخمینی) */
+function usageMonthKey(){ const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1); }
+function usageLocalAdd(field, n){
+  try{
+    const k = 'hisab-usage-local-v1';
+    let o = JSON.parse(localStorage.getItem(k) || '{}');
+    if(o.m !== usageMonthKey()) o = { m: usageMonthKey(), inB: 0, outB: 0, rt: 0 };
+    o[field] = (Number(o[field]) || 0) + n;
+    localStorage.setItem(k, JSON.stringify(o));
+  }catch(e){}
+}
+function usageLocalGet(){
+  try{
+    const o = JSON.parse(localStorage.getItem('hisab-usage-local-v1') || '{}');
+    return o.m === usageMonthKey() ? o : { inB: 0, outB: 0, rt: 0 };
+  }catch(e){ return { inB: 0, outB: 0, rt: 0 }; }
+}
+function usageFetch(input, init){
+  try{
+    const b = init && init.body;
+    if(typeof b === 'string') usageLocalAdd('inB', b.length);
+    else if(b && b.size) usageLocalAdd('inB', b.size);
+  }catch(e){}
+  return fetch(input, init).then(res => {
+    try{
+      const cl = Number(res.headers.get('content-length'));
+      if(cl > 0) usageLocalAdd('outB', cl);
+      else res.clone().blob().then(x => usageLocalAdd('outB', x.size)).catch(() => {});
+    }catch(e){}
+    return res;
+  });
 }
 function loadScriptOnce(src){
   return new Promise((res, rej) => {
@@ -1643,6 +1692,7 @@ function renderNow(){
         <button class="srow-b" data-a="saveSoundToggle">صدای ثبت تغییرات: ${S.snSave === false ? 'غیرفعال شد' : 'فعال شد'}</button>
         <button class="srow-b srow-out" data-a="authLogout">خروج از حساب</button>
         <button class="srow-b" data-a="authOthers">خروج از سایر دستگاه‌ها</button>
+        <button class="srow-b" data-a="usageTable">مصرف ورودی و خروجی و سقف</button>
         <div class="sec-title" style="margin:14px 4px 6px">دستگاه‌های وارد شده</div>
         <div id="devlist" style="display:flex;flex-direction:column;gap:8px"><div class="hint">در حال خواندن...</div></div>
         <div class="ka-row"><b>آخرین بروزرسانی سرور</b><span class="ka-v" id="ka-v">${kaText()}</span></div>
@@ -2642,7 +2692,7 @@ async function lkOk(){
       resetToList();
       return lkUnlock();
     }
-    try{ await cloudLoad(); cloudReady = true; devRegister().finally(() => { DEV_AT = 0; loadDevices(); }); }
+    try{ await cloudLoad(); cloudReady = true; devRegister().finally(() => { DEV_AT = 0; loadDevices(); usageRefresh(); }); }
     catch(e){ LK.err = 'دریافت اطلاعات حساب انجام نشد. اتصال اینترنت را بررسی کنید.'; renderLock(); return; }
     LK.recoveryVerified = true; recClear();
     LK.mode = 'newpass'; LK.f.pass = ''; LK.f.pass2 = ''; renderLock(); return;
@@ -2711,7 +2761,7 @@ async function authLogin(){
     return authErr('ایمیل یا رمز عبور درست نیست. اگر حساب قدیمی دارید، رمز را بازیابی کنید.');
   }
   cloudUser = data.user; cloudReady = false;
-  try{ await cloudLoad(); cloudReady = true; devRegister().finally(() => { DEV_AT = 0; loadDevices(); }); }
+  try{ await cloudLoad(); cloudReady = true; devRegister().finally(() => { DEV_AT = 0; loadDevices(); usageRefresh(); }); }
   catch(e){ await supabaseClient.auth.signOut(); cloudUser = null; return authErr('دریافت اطلاعات حساب از پایگاه داده ناموفق بود. تنظیمات دیتابیس را بررسی کنید.'); }
   S.email = cloudUser.email || mail; S.loggedIn = true;
   delete S.passHash; delete S.reg;
@@ -2812,6 +2862,204 @@ async function devSheetLoad(){
   const others = r.data.filter(d => d.device_id !== getDeviceId()).length;
   box.innerHTML = devRowsHTML(r.data) + (others ? `<button class="btn danger" data-a="devAllOthers" style="margin-top:10px">خروج از همه دستگاه‌های دیگر (${others})</button>` : '');
 }
+
+/* ---------- مصرف Supabase: همه موارد یکجا (کارتی، مناسب گوشی) ---------- */
+/* src: db/storage/users = از SQL (دقیق)، local = تخمین همین گوشی */
+const USAGE_CAPS = [
+  { k:'db',   n:'اندازهٔ پایگاه داده',  capTxt:'۵۰۰ مگابایت',  capVal:500,     mode:'size',  src:'sql' },
+  { k:'stor', n:'فضای فایل‌ها (عکس‌ها)', capTxt:'۱ گیگابایت',   capVal:1024,    mode:'size',  src:'sql' },
+  { k:'egr',  n:'خروجی (دانلود)',        capTxt:'۵ گیگابایت',   capVal:5120,    mode:'size',  src:'local' },
+  { k:'ing',  n:'ورودی (ارسال)',         capTxt:'—',            capVal:0,       mode:'size',  src:'local' },
+  { k:'rt',   n:'پیام‌های بلادرنگ',      capTxt:'۲٬۰۰۰٬۰۰۰',    capVal:2000000, mode:'count', src:'local' },
+  { k:'usr',  n:'کاربران ماهانه',        capTxt:'۵۰٬۰۰۰',       capVal:50000,   mode:'count', src:'sql' },
+  { k:'conn', n:'اتصال همزمان پایگاه',   capTxt:'—',            capVal:0,       mode:'count', src:'sql' },
+];
+function usageGet(){
+  try{ return JSON.parse(localStorage.getItem('hisab-usage-v1') || '{}'); }catch(e){ return {}; }
+}
+function usageSet(v){ try{ localStorage.setItem('hisab-usage-v1', JSON.stringify(v)); }catch(e){} }
+async function usageRefresh(){
+  if(!supabaseClient || !cloudUser || !navigator.onLine) return false;
+  try{
+    const u = usageGet();
+    let ok = false;
+    const r = await withTimeoutSoft(supabaseClient.rpc('usage_stats'), 10000);
+    if(r && !r.error && r.data){
+      const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+      if(d.db != null) u.db = Number(d.db) / 1048576;
+      if(d.storage != null) u.stor = Number(d.storage) / 1048576;
+      if(d.users != null) u.usr = Number(d.users);
+      if(d.conn != null) u.conn = Number(d.conn);
+      ok = true;
+    }else{
+      const r2 = await withTimeoutSoft(supabaseClient.rpc('usage_db_size'), 10000);
+      if(r2 && !r2.error && r2.data != null){ u.db = Number(r2.data) / 1048576; ok = true; }
+    }
+    if(ok){ u.at = new Date().toISOString(); usageSet(u); }
+    return ok;
+  }catch(e){ return false; }
+}
+function fa(n, d){ return (Number(n) || 0).toLocaleString('fa-IR', { maximumFractionDigits: d }); }
+function usageSizeTxt(mb){
+  if(mb >= 1024) return fa(mb / 1024, 2) + ' گیگابایت';
+  return fa(mb, 1) + ' مگابایت';
+}
+function usageItems(){
+  const u = usageGet(), l = usageLocalGet();
+  return USAGE_CAPS.map((c, i) => {
+    let raw = null;
+    if(c.k === 'egr') raw = l.outB / 1048576;
+    else if(c.k === 'ing') raw = l.inB / 1048576;
+    else if(c.k === 'rt') raw = l.rt;
+    else raw = (u[c.k] == null ? null : Number(u[c.k]));
+    const has = raw != null && !isNaN(raw);
+    const pct = has && c.capVal ? (raw / c.capVal) * 100 : 0;
+    const col = pct >= 90 ? '#c0392b' : pct >= 70 ? '#d98a00' : '#1e9e62';
+    let used = '—', kb = '', rem = '—';
+    if(has){
+      if(c.mode === 'size'){
+        used = usageSizeTxt(raw);
+        kb = fa(raw * 1024, 0) + ' کیلوبایت';
+        rem = c.capVal ? usageSizeTxt(Math.max(0, c.capVal - raw)) : '—';
+      }else{
+        used = fa(raw, 0);
+        rem = c.capVal ? fa(Math.max(0, c.capVal - raw), 0) : '—';
+      }
+    }
+    const pTxt = !has ? '—' : !c.capVal ? '' : (pct < 1 ? 'کمتر از ۱٪' : fa(pct, 0) + '٪');
+    return { name: fa(i+1,0) + '. ' + c.n, pct, col, used, kb, cap: c.capTxt, rem, pTxt, loc: c.src === 'local' };
+  });
+}
+function usageRowsHTML(){
+  const u = usageGet();
+  const rows = usageItems().map(it => `<div class="u-card">
+      <div class="u-top"><b>${esc(it.name)}</b><span class="u-pct" style="color:${it.col}">${it.pTxt}</span></div>
+      <div class="u-bar"><i style="width:${Math.min(100, it.pct)}%;background:${it.col}"></i></div>
+      <div class="u-grid">
+        <div><small>مصرف</small><b>${it.used}</b>${it.kb ? `<em>${it.kb}</em>` : ''}</div>
+        <div><small>سقف</small><b>${esc(it.cap)}</b></div>
+        <div><small>باقی‌مانده</small><b>${it.rem}</b></div>
+      </div>${it.loc ? '<span class="u-tag">تخمین همین گوشی</span>' : ''}
+    </div>`).join('');
+  const at = u.at ? new Date(u.at).toLocaleTimeString('fa-IR', { hour:'2-digit', minute:'2-digit' }) : '—';
+  return `<div class="u-list">${rows}</div><div class="hint" style="margin-top:8px">آخرین خواندن از سرور: ${at}</div>`;
+}
+function usageHead(){
+  return `<div class="sh-h u-h">
+    <div class="u-dots-wrap"><button class="ic" data-a="usageMenu" aria-label="گزینه‌ها" style="font-size:24px;font-weight:700;line-height:1">⋮</button>
+      <div class="u-menu hidden" id="usagemenu">
+        <button type="button" data-a="usageShareImg">اشتراک عکس</button>
+        <button type="button" data-a="usageSharePdf">اشتراک PDF</button>
+      </div></div>
+    <span>مصرف و سقف برنامه</span>
+    <button class="ic" data-a="close" aria-label="بستن">${ICON.close}</button></div>`;
+}
+function usageMenuToggle(){
+  const m = document.getElementById('usagemenu');
+  if(!m) return;
+  m.classList.toggle('hidden');
+  if(!m.classList.contains('hidden') && !window.__usageMenuBound){
+    window.__usageMenuBound = true;
+    document.addEventListener('pointerdown', e => {
+      const mm = document.getElementById('usagemenu');
+      if(mm && !mm.classList.contains('hidden') && !e.target.closest('.u-dots-wrap')) mm.classList.add('hidden');
+    }, true);
+  }
+}
+function usageTableOpen(){
+  openSheet(usageHead() + `
+    <div class="hint">پایگاه داده، فضای فایل‌ها و کاربران از سرور خوانده می‌شود. ورودی، خروجی و پیام‌های بلادرنگ را Supabase از راه API نمی‌دهد؛ اینجا حجم همین گوشی از ابتدای این ماه شمرده می‌شود. عدد کل برنامه در Supabase ← Usage است.</div>
+    <div id="usagebox">${usageRowsHTML()}</div>`);
+  usageRefresh().then(ok => { const bx = document.getElementById('usagebox'); if(bx) bx.innerHTML = usageRowsHTML(); });
+}
+/* اشتراک جدول مصرف به شکل عکس یا PDF؛ همان رنگ‌های سبز/نارنجی/قرمز */
+async function usageShare(asPdf){
+  const m = document.getElementById('usagemenu'); if(m) m.classList.add('hidden');
+  const items = usageItems();
+  const font = 'Vazirmatn, Tahoma, sans-serif';
+  try{ await document.fonts.load('bold 16px Vazirmatn'); await document.fonts.load('600 14px Vazirmatn'); await document.fonts.load('14px Vazirmatn'); }catch(e){}
+  const W = 800, PAD = 40, GAP = 16, TOP = 110;
+  const cardH = it => 24 + 30 + 14 + 10 + 22 + 20 + 30 + (it.kb ? 22 : 0) + (it.loc ? 38 : 0) + 14;
+  const H = TOP + items.reduce((a, it) => a + cardH(it) + GAP, 0) + 70;
+  const Q = 2, cv = document.createElement('canvas');
+  cv.width = W * Q; cv.height = H * Q;
+  const x = cv.getContext('2d');
+  x.scale(Q, Q); x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
+  try{ x.direction = 'rtl'; }catch(e){}
+  x.textBaseline = 'middle';
+  x.fillStyle = '#f3f6fa'; x.fillRect(0, 0, W, H);
+  const rr = (X, Y, w, h, r) => {
+    x.beginPath(); x.moveTo(X + r, Y); x.lineTo(X + w - r, Y); x.quadraticCurveTo(X + w, Y, X + w, Y + r);
+    x.lineTo(X + w, Y + h - r); x.quadraticCurveTo(X + w, Y + h, X + w - r, Y + h);
+    x.lineTo(X + r, Y + h); x.quadraticCurveTo(X, Y + h, X, Y + h - r);
+    x.lineTo(X, Y + r); x.quadraticCurveTo(X, Y, X + r, Y); x.closePath();
+  };
+  /* عنوان */
+  x.textAlign = 'right'; x.fillStyle = '#1f2937'; x.font = `bold 28px ${font}`;
+  x.fillText('مصرف و سقف برنامه', W - PAD, 52);
+  const nowD = new Date();
+  x.textAlign = 'left'; x.fillStyle = '#64748b'; x.font = `14px ${font}`;
+  x.fillText(nowD.toLocaleDateString('fa-IR') + '  ' + nowD.toLocaleTimeString('fa-IR', { hour:'2-digit', minute:'2-digit' }), PAD, 52);
+  x.textAlign = 'right'; x.fillStyle = '#64748b'; x.font = `14px ${font}`;
+  x.fillText('Supabase', W - PAD, 84);
+  let y = TOP;
+  const innerW = W - PAD * 2 - 40, colW = innerW / 3, rightEdge = W - PAD - 20;
+  items.forEach(it => {
+    const h = cardH(it);
+    x.fillStyle = '#ffffff'; rr(PAD, y, W - PAD * 2, h, 18); x.fill();
+    x.strokeStyle = '#dfe3ea'; x.lineWidth = 1; rr(PAD, y, W - PAD * 2, h, 18); x.stroke();
+    let cy = y + 24 + 15;
+    x.textAlign = 'right'; x.fillStyle = '#1f2937'; x.font = `bold 18px ${font}`;
+    x.fillText(it.name, W - PAD - 20, cy);
+    x.textAlign = 'left'; x.fillStyle = it.col; x.font = `bold 16px ${font}`;
+    x.fillText(it.pTxt, PAD + 20, cy);
+    cy += 15 + 14 + 5;
+    x.fillStyle = '#e6edf8'; rr(PAD + 20, cy - 5, innerW, 10, 5); x.fill();
+    const fw = Math.max(0, Math.min(100, it.pct)) / 100 * innerW;
+    if(fw > 0){ x.fillStyle = it.col; rr(W - PAD - 20 - Math.max(fw, 10), cy - 5, Math.max(fw, 10), 10, 5); x.fill(); }
+    cy += 5 + 20;
+    const cols = [['مصرف', it.used, it.kb], ['سقف', it.cap, ''], ['باقی‌مانده', it.rem, '']];
+    cols.forEach((cl, i) => {
+      const cx = rightEdge - colW * (i + 0.5);
+      x.textAlign = 'center'; x.fillStyle = '#64748b'; x.font = `14px ${font}`;
+      x.fillText(cl[0], cx, cy);
+      x.fillStyle = '#1f2937'; x.font = `600 17px ${font}`;
+      x.fillText(String(cl[1]), cx, cy + 28);
+      if(cl[2]){ x.fillStyle = '#64748b'; x.font = `13px ${font}`; x.fillText(cl[2], cx, cy + 52); }
+    });
+    if(it.loc){
+      const ty = y + h - 14 - 12;
+      x.font = `13px ${font}`;
+      const tw = x.measureText('تخمین همین گوشی').width + 24;
+      x.fillStyle = '#e6edf8'; rr(W - PAD - 20 - tw, ty - 12, tw, 24, 12); x.fill();
+      x.textAlign = 'center'; x.fillStyle = '#64748b';
+      x.fillText('تخمین همین گوشی', W - PAD - 20 - tw / 2, ty);
+    }
+    y += h + GAP;
+  });
+  x.textAlign = 'right'; x.fillStyle = '#64748b'; x.font = `14px ${font}`;
+  x.fillText('ساخته شده با حساب دفتری', W - PAD, H - 30);
+  cv.toBlob(async jpg => {
+    if(!jpg){ showToast('ساخت فایل انجام نشد'); return; }
+    let file, blobOut;
+    if(asPdf){
+      const bytes = new Uint8Array(await jpg.arrayBuffer());
+      const pdf = jpegToPdf(bytes, W, H, cv.width, cv.height);
+      file = new File([pdf], 'مصرف و سقف.pdf', { type: 'application/pdf' }); blobOut = pdf;
+    }else{
+      file = new File([jpg], 'مصرف و سقف.jpg', { type: 'image/jpeg' }); blobOut = jpg;
+    }
+    if(navigator.canShare && navigator.canShare({ files: [file] })){
+      try{ await navigator.share({ files: [file], title: 'مصرف و سقف برنامه' }); return; }catch(e){ return; }
+    }
+    const url = URL.createObjectURL(blobOut);
+    const a = document.createElement('a');
+    a.href = url; a.download = file.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }, 'image/jpeg', 0.92);
+}
+
 async function authOthers(){
   if(!navigator.onLine){ showToast('اینترنت قطع است. اینترنت را روشن کنید.'); return; }
   openSheet(sheetHead('دستگاه‌های وارد شده') + '<div id="devsheet"><div class="hint">در حال خواندن...</div></div>');
@@ -3643,6 +3891,7 @@ async function kaRetry(){
   await kaLoad();
   updateNetDot();
   DEV_AT = 0; loadDevices();
+  usageRefresh();
 }
 function nbNoteEditHTML(x){
   return sheetHead('ویرایش یادداشت') + `
@@ -4317,6 +4566,10 @@ document.addEventListener('click', async e => {
     case 'passSave': passSave(); break;
     case 'authLogout': authLogout(); break;
     case 'authOthers': authOthers(); break;
+    case 'usageTable': usageTableOpen(); break;
+    case 'usageMenu': usageMenuToggle(); break;
+    case 'usageShareImg': usageShare(false); break;
+    case 'usageSharePdf': usageShare(true); break;
     case 'devRemove': devRemove(el.dataset.d); break;
     case 'devAllOthers': devAllOthers(); break;
     case 'authToSignup': LK.mode = 'login'; LK.err = 'ثبت‌نام عمومی بسته است.'; renderLock(); break;
@@ -5048,6 +5301,7 @@ function startLive(){
   }catch(e){ console.warn('realtime:', e); }
 }
 function liveKick(){
+  usageLocalAdd('rt', 1);
   clearTimeout(LIVE_T);
   LIVE_T = setTimeout(liveRefresh, 400);
 }
