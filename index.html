@@ -5657,7 +5657,7 @@ async function runBackup(){
   /* ترتیب: سال-روز-ماه، مثل 1405-21-8 */
   const dateTxt = pv('year') + '-' + pv('day') + '-' + pv('month');
   const timeTxt = bkTimeTxt(now);
-  const fname = 'daftari-' + pv('day') + '-' + pv('month') + '-' + pv('year') + '-' + ((now.getHours() % 12) || 12) + '꞉' + String(now.getMinutes()).padStart(2,'0') + ' (' + n + ').json';
+  const fname = 'daftari-' + pv('day') + '-' + pv('month') + '-' + pv('year') + '-' + ((now.getHours() % 12) || 12) + '꞉' + String(now.getMinutes()).padStart(2,'0') + '꞉' + String(now.getSeconds()).padStart(2,'0') + '.json';
   const nbData = await bkNotebooks();
   const payload = {
     app: 'hisab-backup', version: 1, created: now.toISOString(), backupNo: n,
