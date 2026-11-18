@@ -1643,8 +1643,7 @@ function renderNow(){
     const rest = inc - exp;
     const LS = ledgerRows(L);
     m.innerHTML = `<header class="top">
-        <span class="net-dot ${netOnline() ? 'on' : 'off'}"><i>${netOnline() ? 'آنلاین' : 'آفلاین'}</i></span>
-        <button class="ic dots" data-a="ledgerMenu" aria-label="گزینه‌ها">⋮</button>
+        <span style="display:flex;align-items:center;gap:6px;flex:none"><button class="ic dots" data-a="ledgerMenu" aria-label="گزینه‌ها">⋮</button><span class="net-dot ${netOnline() ? 'on' : 'off'}"><i>${netOnline() ? 'آنلاین' : 'آفلاین'}</i></span></span>
         <h1>دخل و خرج</h1>
         <button type="button" class="ic" data-a="ledgerShare" aria-label="اشتراک گذاری">${ICON.share}</button>
       </header>
