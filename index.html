@@ -5394,15 +5394,15 @@ function startLive(){
   const sub = table => ({ event:'*', schema:'public', table, filter:'u=eq.' + uid });
   try{
     LIVE_CH = supabaseClient.channel('hisab-live-' + uid)
-      .on('postgres_changes', sub('p'), liveKick)
-      .on('postgres_changes', sub('c'), liveKick)
-      .on('postgres_changes', sub('t'), liveKick)
-      .on('postgres_changes', sub('l'), liveKick)
+      .on('postgres_changes', sub('p'), ev => liveApply('p', ev))
+      .on('postgres_changes', sub('c'), ev => liveApply('c', ev))
+      .on('postgres_changes', sub('t'), ev => liveApply('t', ev))
+      .on('postgres_changes', sub('l'), ev => liveApply('l', ev))
       .on('postgres_changes', sub('nb'), liveKick)
       .on('postgres_changes', sub('ny'), liveKick)
       .on('postgres_changes', sub('s'), liveKick)
       .on('postgres_changes', sub('pref'), liveKick)
-      .subscribe((st) => { LIVE_OK = st === 'SUBSCRIBED'; updateNetDot(); if(st === 'SUBSCRIBED') setTimeout(() => liveRefresh(), 300); });
+      .subscribe((st) => { LIVE_OK = st === 'SUBSCRIBED'; updateNetDot(); if(st === 'SUBSCRIBED'){ if(LIVE_SUBS++ > 0) setTimeout(() => liveRefresh(), 300); } });
   }catch(e){ console.warn('realtime:', e); }
 }
 function liveKick(){
@@ -5419,6 +5419,86 @@ function liveUIBusy(){
 let TOUCHING = false, TOUCH_T = 0;
 document.addEventListener('touchstart', () => { TOUCHING = true; }, { passive:true });
 ['touchend','touchcancel'].forEach(ev => document.addEventListener(ev, () => { TOUCHING = false; TOUCH_T = Date.now(); }, { passive:true }));
+let LIVE_SUBS = 0;
+let LIVE_Q = Promise.resolve();
+/* تغییرات زنده را یکی‌یکی و به ترتیب اعمال می‌کند؛ فقط همان ردیف را نگه می‌دارد و کل داده‌ها را دوباره نمی‌خواند */
+function liveApply(tb, ev){
+  LIVE_Q = LIVE_Q.then(() => liveApplyNow(tb, ev)).catch(e => console.warn('live apply:', e));
+}
+function liveFallback(){ return liveRefresh(); }
+function liveScheduleRender(){
+  if(liveUIBusy() || LK.locked){ setTimeout(liveScheduleRender, 2000); return; }
+  render();
+}
+function txFromRow(r){
+  return { id:r.id, a:Number(r.a)||0, d:r.d||'', y:Number(r.y)||0, m:Number(r.m)||1, dd:Number(r.dd)||1, ts:Number(r.ts)||0,
+    hh: r.hh == null ? undefined : Number(r.hh), mm: r.mm == null ? undefined : Number(r.mm) };
+}
+function ledgerFromRow(r){
+  return { id:r.id, type: r.ty === 'out' ? 'out' : 'in', a:Number(r.a)||0, d:r.d||'', y:Number(r.y)||0, m:Number(r.m)||1, dd:Number(r.dd)||1, ts:Number(r.ts)||0,
+    hh: r.hh == null ? null : Number(r.hh), mm: r.mm == null ? null : Number(r.mm) };
+}
+async function liveApplyNow(tb, ev){
+  if(!supabaseClient || !cloudUser || !SYNC_SNAP) return liveFallback();
+  if(tb === 'l' && !ledgerCloudOk) return;
+  const u = cloudUser.id;
+  const isDel = ev.eventType === 'DELETE';
+  const row = isDel ? ev.old : ev.new;
+  if(!row || row.id == null) return;
+  const id = String(row.id);
+  /* حذف حساب یا مشتری ممکن است زیرمجموعه‌ها را هم ببرد؛ در این مورد یک‌بار کامل می‌خوانیم */
+  if(isDel && (tb === 'p' || tb === 'c')) return liveFallback();
+  const prev = SYNC_SNAP[tb] || new Map();
+  const prevJ = prev.get(id);
+  /* اگر همین گوشی تغییر تازه‌ای دارد که هنوز فرستاده نشده، آن را روی داده‌های خارجی بازنویسی نمی‌کنیم */
+  const localNow = (cloudRowsFor(u)[tb] || []).find(r => String(r.id) === id);
+  const localJ = localNow ? JSON.stringify(localNow) : undefined;
+  if(localJ !== prevJ) return;
+
+  if(tb === 'p'){
+    const ex = (S.parties || []).find(x => String(x.id) === id);
+    if(ex){ ex.n = row.n || ''; ex.cur = row.cur || 'toman'; }
+    else (S.parties = S.parties || []).push({ id:row.id, n:row.n || '', cur:row.cur || 'toman', c:[] });
+  }
+  else if(tb === 'c'){
+    let old = null;
+    (S.parties || []).forEach(par => {
+      const i = (par.c || []).findIndex(x => String(x.id) === id);
+      if(i >= 0){ old = par.c[i]; par.c.splice(i, 1); }
+    });
+    const par = (S.parties || []).find(x => String(x.id) === String(row.p));
+    if(!par) return liveFallback();
+    par.c = par.c || [];
+    par.c.push({ id:row.id, n:row.n || '', ph:row.ph || '', ds:row.ds || '', pf:row.pf || '', ac:row.ac || '', tx: old ? old.tx : [] });
+  }
+  else if(tb === 't'){
+    let cust = null;
+    (S.parties || []).forEach(par => (par.c || []).forEach(c => {
+      const i = (c.tx || []).findIndex(x => String(x.id) === id);
+      if(i >= 0) c.tx.splice(i, 1);
+      if(String(c.id) === String(row.c)) cust = c;
+    }));
+    if(!isDel){
+      if(!cust) return liveFallback();
+      cust.tx = cust.tx || [];
+      cust.tx.push(txFromRow(row));
+    }
+  }
+  else if(tb === 'l'){
+    S.ledger = (S.ledger || []).filter(x => String(x.id) !== id);
+    if(!isDel) S.ledger.push(ledgerFromRow(row));
+  }
+
+  /* وضعیت جدید این ردیف را به‌عنوان وضعیت سرور نگه می‌داریم */
+  const newRow = isDel ? undefined : (cloudRowsFor(u)[tb] || []).find(r => String(r.id) === id);
+  const newJ = newRow ? JSON.stringify(newRow) : undefined;
+  if(newJ === prevJ) return;
+  if(newJ === undefined) prev.delete(id); else prev.set(id, newJ);
+  SYNC_SNAP[tb] = prev;
+  try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){}
+  liveScheduleRender();
+}
+
 async function liveRefresh(){
   if(!supabaseClient || !navigator.onLine) return;
   if(!cloudUser) await ensureCloudUser();
