@@ -1450,22 +1450,22 @@ window.addEventListener('online', () => { if(!NBSYNCED && cloudUser) nbLoad(); }
     }));
     location.reload();
   }
-  /* بروزرسانی فقط با دکمهٔ کاربر انجام می‌شود؛ برنامه خودش صفحه را دوباره باز نمی‌کند */
-  window.appUpdate = function(){
-    if(!window.__newBuild) return;
-    localStorage.setItem(KEY, window.__newBuild);
-    resumeAndReload();
-  };
+  /* بروزرسانی خودکار: وقتی برنامه بیکار است، نسخهٔ جدید خودش نصب می‌شود و همان صفحه دوباره باز می‌شود */
+  let checking = false;
   async function check(){
-    if(!navigator.onLine || window.__newBuild) return;
-    const b = await buildId();
-    if(!b) return;
-    const saved = localStorage.getItem(KEY);
-    if(!saved){ localStorage.setItem(KEY, b); return; }
-    if(saved === b) return;
-    window.__newBuild = b;
-    showToast('نسخهٔ جدید برنامه آماده است. از تنظیمات دکمهٔ «بروز کن» را بزنید.', true);
-    if(V.view === 'settings') render();
+    if(checking || !navigator.onLine || busy() || (typeof WRITING !== 'undefined' && WRITING)) return;
+    checking = true;
+    try{
+      const b = await buildId();
+      if(!b) return;
+      const saved = localStorage.getItem(KEY);
+      if(!saved){ localStorage.setItem(KEY, b); return; }
+      if(saved === b) return;
+      /* اگر در همین لحظه کاربر وسط کار باشد، کمی بعد دوباره بررسی می‌شود */
+      if(busy() || (typeof WRITING !== 'undefined' && WRITING)) return;
+      localStorage.setItem(KEY, b);
+      resumeAndReload();
+    } finally { checking = false; }
   }
   setTimeout(check, 4000);
   setInterval(check, 5000);
@@ -1738,7 +1738,6 @@ function renderNow(){
       </div>
       <div class="ka-row"><b>آخرین بروزرسانی سرور</b><span class="ka-v" id="ka-v">${kaText()}</span></div>
       <div class="ka-act">${kaBtnHTML()}</div>
-      ${window.__newBuild ? '<div class="ka-row"><b>نسخهٔ جدید برنامه آماده است</b></div><div class="ka-act"><button type="button" class="ka-btn ok" onclick="appUpdate()">بروز کن</button></div>' : ''}
       </div>
 
 `;
