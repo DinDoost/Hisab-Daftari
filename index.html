@@ -713,7 +713,97 @@ async function cloudLoad(){
   });
   try{ await settingsLoad(); }catch(e){ console.warn('settings load:', e); }
   S = { ...S, cur:S.cur || 'toman', parties, ledger, email:cloudUser.email || S.email || '', loggedIn:true };
+  SYNC_SNAP = null; cloudSnapSet(cloudRowsFor(cloudUser.id));
   try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){}
+}
+
+const SYNC_CHUNK = 500;
+let SYNC_SNAP = null; /* آخرین وضعیتی که روی سرور است؛ فقط ردیف‌های تغییرکرده فرستاده می‌شوند */
+
+function cloudRowsFor(u){
+  const parties = S.parties || [];
+  const customers = parties.flatMap(p => (p.c || []).map(c => ({ p, c })));
+  const transactions = customers.flatMap(x => (x.c.tx || []).map(t => ({ c:x.c, t })));
+  const R = {
+    p: parties.map(p => ({ id:String(p.id), u, n:p.n || '', cur:p.cur || 'toman' })),
+    c: customers.map(x => ({ id:String(x.c.id), u, p:String(x.p.id), n:x.c.n || '', ph:x.c.ph || '', ds:x.c.ds || '', pf:x.c.pf || null, ac:x.c.ac || null })),
+    t: transactions.map(x => ({ id:String(x.t.id), u, c:String(x.c.id), a:Math.trunc(Number(x.t.a)||0), d:x.t.d || '', y:Math.trunc(Number(x.t.y)||0), m:Math.trunc(Number(x.t.m)||1), dd:Math.trunc(Number(x.t.dd)||1), ts:Math.trunc(Number(x.t.ts)||0), hh: x.t.hh == null ? null : Math.trunc(Number(x.t.hh)), mm: x.t.mm == null ? null : Math.trunc(Number(x.t.mm)) }))
+  };
+  if(ledgerCloudOk){
+    R.l = (S.ledger || []).map(x => ({ id:String(x.id), u, ty:x.type === 'out' ? 'out' : 'in', a:Math.trunc(Number(x.a)||0), d:x.d || '',
+      y:Math.trunc(Number(x.y)||0), m:Math.trunc(Number(x.m)||1), dd:Math.trunc(Number(x.dd)||1), ts:Math.trunc(Number(x.ts)||0),
+      hh: x.hh == null ? null : Math.trunc(Number(x.hh)), mm: x.mm == null ? null : Math.trunc(Number(x.mm)) }));
+  }
+  return R;
+}
+/* وضعیت فعلی سرور را ذخیره می‌کند تا دفعه‌های بعد فقط تغییرات فرستاده شوند */
+function cloudSnapSet(R){
+  SYNC_SNAP = {};
+  for(const tb of ['p','c','t','l']){
+    if(R[tb]) SYNC_SNAP[tb] = new Map(R[tb].map(r => [String(r.id), JSON.stringify(r)]));
+  }
+}
+async function cloudChunked(table, fn, rows){
+  for(let i = 0; i < rows.length; i += SYNC_CHUNK){
+    const { error } = await fn(supabaseClient.from(table), rows.slice(i, i + SYNC_CHUNK));
+    if(error) throw error;
+  }
+}
+async function cloudFullSync(u, R){
+  for(const tb of ['p','c','t']) await cloudChunked(tb, (q, rows) => q.upsert(rows, { onConflict:'id' }), R[tb]);
+  for(const tb of ['t','c','p']){
+    const rows = R[tb];
+    let q = supabaseClient.from(tb).delete().eq('u', u);
+    if(rows.length) q = q.not('id','in',`(${rows.map(r => String(r.id)).join(',')})`);
+    const { error } = await q;
+    if(error) throw error;
+  }
+  if(R.l){
+    try{
+      await cloudChunked('l', (q, rows) => q.upsert(rows, { onConflict:'id' }), R.l);
+      let q = supabaseClient.from('l').delete().eq('u', u);
+      if(R.l.length) q = q.not('id','in',`(${R.l.map(r => String(r.id)).join(',')})`);
+      const { error } = await q;
+      if(error) throw error;
+    }catch(e){
+      console.error('Ledger sync error:', e);
+      lastLedgerErr = (e && e.message) || String(e);
+      if(ledgerStrict) throw e;
+      if(!ledgerWarned){ ledgerWarned = true; showToast('دخل و خرج آنلاین ذخیره نشد؛ جدول l را در Supabase بسازید.'); }
+    }
+  }
+}
+async function cloudDiffSync(u, R){
+  const prevOf = tb => (SYNC_SNAP && SYNC_SNAP[tb]) || new Map();
+  const changedOf = tb => R[tb].filter(r => prevOf(tb).get(String(r.id)) !== JSON.stringify(r));
+  const removedOf = tb => {
+    const cur = new Set(R[tb].map(r => String(r.id)));
+    return [...prevOf(tb).keys()].filter(id => !cur.has(id));
+  };
+  const upsertTb = async tb => {
+    const rows = changedOf(tb);
+    if(rows.length) await cloudChunked(tb, (q, part) => q.upsert(part, { onConflict:'id' }), rows);
+  };
+  const deleteTb = async tb => {
+    const ids = removedOf(tb);
+    for(let i = 0; i < ids.length; i += SYNC_CHUNK){
+      const { error } = await supabaseClient.from(tb).delete().eq('u', u).in('id', ids.slice(i, i + SYNC_CHUNK));
+      if(error) throw error;
+    }
+  };
+  for(const tb of ['p','c','t']) await upsertTb(tb);
+  for(const tb of ['t','c','p']) await deleteTb(tb);
+  if(R.l){
+    try{
+      await upsertTb('l');
+      await deleteTb('l');
+    }catch(e){
+      console.error('Ledger sync error:', e);
+      lastLedgerErr = (e && e.message) || String(e);
+      if(ledgerStrict) throw e;
+      if(!ledgerWarned){ ledgerWarned = true; showToast('دخل و خرج آنلاین ذخیره نشد؛ جدول l را در Supabase بسازید.'); }
+    }
+  }
 }
 
 async function cloudSyncNow(){
@@ -724,27 +814,6 @@ async function cloudSyncNow(){
     do{
       cloudSyncAgain = false;
       const u = cloudUser.id;
-      const parties = S.parties || [];
-      const customers = parties.flatMap(p => (p.c || []).map(c => ({ p, c })));
-      const transactions = customers.flatMap(x => (x.c.tx || []).map(t => ({ c:x.c, t })));
-      const pRows = parties.map(p => ({ id:String(p.id), u, n:p.n || '', cur:p.cur || 'toman' }));
-      const cRows = customers.map(x => ({ id:String(x.c.id), u, p:String(x.p.id), n:x.c.n || '', ph:x.c.ph || '', ds:x.c.ds || '', pf:x.c.pf || null, ac:x.c.ac || null }));
-      const tRows = transactions.map(x => ({ id:String(x.t.id), u, c:String(x.c.id), a:Math.trunc(Number(x.t.a)||0), d:x.t.d || '', y:Math.trunc(Number(x.t.y)||0), m:Math.trunc(Number(x.t.m)||1), dd:Math.trunc(Number(x.t.dd)||1), ts:Math.trunc(Number(x.t.ts)||0), hh: x.t.hh == null ? null : Math.trunc(Number(x.t.hh)), mm: x.t.mm == null ? null : Math.trunc(Number(x.t.mm)) }));
-      for(const [table, rows] of [['p',pRows],['c',cRows],['t',tRows]]){
-        if(rows.length){
-          const {error} = await supabaseClient.from(table).upsert(rows, { onConflict:'id' });
-          if(error) throw error;
-        }
-      }
-      async function deleteMissing(table, rows){
-        let q = supabaseClient.from(table).delete().eq('u',u);
-        if(rows.length) q = q.not('id','in',`(${rows.map(r => String(r.id)).join(',')})`);
-        const {error} = await q;
-        if(error) throw error;
-      }
-      await deleteMissing('t', tRows);
-      await deleteMissing('c', cRows);
-      await deleteMissing('p', pRows);
       /* دفتر دخل و خرج (جدول l) — اگر خطا داد، بقیهٔ اطلاعات همچنان همگام می‌شود */
       if(!ledgerCloudOk){
         const pr = await supabaseClient.from('l').select('id,ty,a,d,y,m,dd,ts,hh,mm').eq('u',u);
@@ -757,23 +826,10 @@ async function cloudSyncNow(){
           ledgerCloudOk = true;
         }
       }
-      if(ledgerCloudOk){
-        try{
-          const lRows = (S.ledger || []).map(x => ({ id:String(x.id), u, ty:x.type === 'out' ? 'out' : 'in', a:Math.trunc(Number(x.a)||0), d:x.d || '',
-            y:Math.trunc(Number(x.y)||0), m:Math.trunc(Number(x.m)||1), dd:Math.trunc(Number(x.dd)||1), ts:Math.trunc(Number(x.ts)||0),
-            hh: x.hh == null ? null : Math.trunc(Number(x.hh)), mm: x.mm == null ? null : Math.trunc(Number(x.mm)) }));
-          if(lRows.length){
-            const {error} = await supabaseClient.from('l').upsert(lRows, { onConflict:'id' });
-            if(error) throw error;
-          }
-          await deleteMissing('l', lRows);
-        }catch(e){
-          console.error('Ledger sync error:', e);
-          lastLedgerErr = (e && e.message) || String(e);
-          if(ledgerStrict) throw e;
-          if(!ledgerWarned){ ledgerWarned = true; showToast('دخل و خرج آنلاین ذخیره نشد؛ جدول l را در Supabase بسازید.'); }
-        }
-      }
+      const R = cloudRowsFor(u);
+      if(SYNC_SNAP) await cloudDiffSync(u, R);
+      else await cloudFullSync(u, R);
+      cloudSnapSet(R);
     }while(cloudSyncAgain);
   }catch(e){ console.error('Supabase sync error:', e); return false; }
   finally{ cloudSyncing = false; }
