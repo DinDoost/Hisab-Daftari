@@ -614,6 +614,7 @@ let ledgerCloudOk = true, ledgerWarned = false, ledgerStrict = false, lastLedger
 
 /* تنظیمات مشترک هر کاربر (بایگانی و واحد دخل و خرج) در جدول s ذخیره می‌شود تا روی همه گوشی‌ها یکسان باشد */
 let SET_LAST_KEY = '', settingsTimer = null, SET_PENDING = false;
+let LAST_BK = '';   /* زمان آخرین پشتیبان‌گیری که از سرور خوانده یا ثبت شده */
 function settingsKey(){ return JSON.stringify([lgCurKey(), S.archIds || []]); }
 async function settingsSyncNow(){
   if(!supabaseClient || !cloudUser) return;
@@ -644,6 +645,10 @@ async function settingsLoad(){
     /* بار اول: تنظیمات همین گوشی به ابر فرستاده می‌شود */
     await settingsSyncNow();
   }
+  try{
+    const r = await supabaseClient.from('s').select('lbk').eq('u', cloudUser.id).maybeSingle();
+    if(!r.error && r.data && r.data.lbk){ LAST_BK = r.data.lbk; try{ localStorage.setItem('hesab-last-backup', LAST_BK); }catch(e){} }
+  }catch(e){ console.warn('last backup read:', e); }
 }
 
 /* تنظیمات بایگانی و واحد مبلغ را از سرور می‌گیرد؛ وقتی برنامه دوباره فعال یا آنلاین شود و در حالت عادی با اتصال زنده به‌روز می‌شود */
@@ -652,9 +657,9 @@ async function settingsPoll(){
   try{
     if(settingsKey() !== SET_LAST_KEY) SET_PENDING = true;
     if(SET_PENDING){ await settingsSyncNow(); return; }
-    const before = settingsKey();
+    const before = settingsKey(), bkBefore = LAST_BK;
     await settingsLoad();
-    if(settingsKey() !== before && !liveUIBusy()) render();
+    if((settingsKey() !== before || LAST_BK !== bkBefore) && !liveUIBusy()) render();
   }catch(e){ console.warn('settings poll:', e); }
 }
 document.addEventListener('visibilitychange', () => { if(!document.hidden) settingsPoll(); });
@@ -1724,7 +1729,7 @@ function renderNow(){
       <div class="srow">
         <button class="srow-b" data-a="pinToggle">پین کد امنیتی: ${S.pin ? 'فعال' : 'غیرفعال'}</button>
         ${S.pin ? '<button class="srow-b" data-a="pinChange">تغییر پین</button>' : ''}
-        <button class="srow-b" onclick="showBackupAsk()">پشتیبان‌گیری</button>
+        <button class="srow-b off-restore" onclick="showBackupAsk()" style="cursor:pointer;display:block;text-align:right"><span style="display:block;font-size:15px;font-weight:700">پشتیبان‌گیری</span><span style="display:block;font-size:12px;font-weight:500;color:var(--muted);margin-top:4px">آخرین پشتیبان‌گیری: ${onLastBackupTxt()}</span></button>
         <button class="srow-b" data-a="keySoundOpen">صدای کلیدها: ${({on:'فعال', off:'خاموش'})[keyMode()]}</button>
         <button class="srow-b" data-a="saveSoundOpen">صدای ثبت و ویرایش: ${S.snSave === false ? 'خاموش' : 'فعال'}</button>
         <button class="srow-b srow-out" data-a="authLogout">خروج از حساب</button>
@@ -5601,6 +5606,18 @@ async function bkNotebooks(){
   }catch(e){}
   return { nb: NB, ny: NY };
 }
+/* آخرین پشتیبان‌گیری: تاریخ شمسی و ساعت همان لحظه، ذخیره و نمایش داده می‌شود */
+function onLastBackupTxt(){
+  let iso = LAST_BK || null;
+  if(!iso){ try{ iso = localStorage.getItem('hesab-last-backup'); }catch(e){} }
+  if(!iso) return 'هنوز انجام نشده';
+  const d = new Date(iso);
+  if(isNaN(d)) return 'هنوز انجام نشده';
+  const parts = new Intl.DateTimeFormat('fa-IR-u-ca-persian-nu-latn', { year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(d);
+  const pv = t => (parts.find(x => x.type === t) || {}).value || '';
+  const h = d.getHours(), h12 = (h % 12) || 12, mi = String(d.getMinutes()).padStart(2, '0');
+  return pv('year') + '/' + pv('month') + '/' + pv('day') + ' ساعت ' + h12 + ':' + mi + ' ' + (h < 12 ? 'ق.ظ' : 'ب.ظ');
+}
 async function runBackup(){
   let cnt = 0; try{ cnt = Number(localStorage.getItem('hesab-backup-count') || 0); localStorage.setItem('hesab-backup-count', String(cnt + 1)); }catch(e){}
   const n = (cnt % 10) + 1;   /* شماره‌ها ۱ تا ۱۰ و دوباره از ۱ */
@@ -5623,6 +5640,15 @@ async function runBackup(){
   a.href = url; a.download = fname;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
+  const bkAt = new Date().toISOString();
+  LAST_BK = bkAt;
+  try{ localStorage.setItem('hesab-last-backup', bkAt); }catch(e){}
+  if(supabaseClient && cloudUser && navigator.onLine){
+    try{
+      const { error } = await supabaseClient.from('s').update({ lbk: bkAt }).eq('u', cloudUser.id);
+      if(error) console.warn('backup time save:', error);
+    }catch(e){ console.warn('backup time save:', e); }
+  }
   closeBk(); render();
   showToast('پکاپ گیری با موفقیت در پوشه دانلود انجام شد', true);
 }
