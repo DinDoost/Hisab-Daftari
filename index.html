@@ -594,7 +594,7 @@ const SUPA_READY = (async () => {
 })();
 let cloudUser = null, cloudReady = false, cloudSyncTimer = null;
 let LIVE_OK = false;   /* آیا اتصال زنده با سرور برقرار است */
-function netOnline(){ return !!(navigator.onLine && cloudUser && cloudReady && LIVE_OK); }
+function netOnline(){ return kaOn(); }  /* یک قانون مشترک برای همهٔ نشانگرها */
 let NET_WAS_ON = false;
 function updateNetDot(){
   const on = netOnline();
@@ -3939,12 +3939,17 @@ function kaText(){
   return kaFmt(KA.t);
 }
 /* سبز: آنلاین، یا اینکه آخرین بروزرسانی سرور خوانده شده و اینترنت وصل است (برنامه تراکنش‌ها را انجام می‌دهد) */
-function kaOn(){ return !!navigator.onLine && (netOnline() || (KA.state === 'ok' && !!KA.t)); }
+function kaOn(){ return !!navigator.onLine && !!((cloudUser && cloudReady && LIVE_OK) || (KA.state === 'ok' && !!KA.t)); }
 function kaBtnHTML(){
   const on = kaOn();
   return `<button type="button" class="ka-btn ${on ? 'ok' : 'bad'}" id="ka-dot" onclick="kaRetry()">${on ? 'آنلاین' : 'وصل شو'}</button>`;
 }
 function kaPaint(){
+  const on0 = kaOn();
+  document.querySelectorAll('.net-dot').forEach(d => {
+    d.className = 'net-dot ' + (on0 ? 'on' : 'off');
+    const t = d.querySelector('i'); if(t) t.textContent = on0 ? 'آنلاین' : 'آفلاین';
+  });
   const el = document.getElementById('ka-v'), dot = document.getElementById('ka-dot');
   if(el) el.textContent = kaText();
   if(dot){
@@ -4019,7 +4024,7 @@ async function kaLoad(){
     else{ KA.t = null; KA.state = 'none'; }
   }catch(e){ console.warn('keepalive read:', e); KA.state = 'err'; }
   KA_BUSY = false;
-  if(V.view === 'settings') kaPaint();
+  kaPaint();
 }
 window.addEventListener('online', () => { if(S.loggedIn && cloudUser) kaRetry(); else kaPaint(); });
 window.addEventListener('offline', () => { KA.state = 'err'; kaPaint(); });
