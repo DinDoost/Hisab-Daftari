@@ -5618,7 +5618,12 @@ function onLastBackupTxt(){
   const h = d.getHours(), h12 = (h % 12) || 12, mi = String(d.getMinutes()).padStart(2, '0');
   return pv('year') + '/' + pv('month') + '/' + pv('day') + ' ساعت ' + h12 + ':' + mi + ' ' + (h < 12 ? 'ق.ظ' : 'ب.ظ');
 }
+let BK_BUSY = false;
 async function runBackup(){
+  if(BK_BUSY) return;
+  BK_BUSY = true;
+  closeBk();
+  try{
   let cnt = 0; try{ cnt = Number(localStorage.getItem('hesab-backup-count') || 0); localStorage.setItem('hesab-backup-count', String(cnt + 1)); }catch(e){}
   const n = (cnt % 10) + 1;   /* شماره‌ها ۱ تا ۱۰ و دوباره از ۱ */
   const now = new Date();
@@ -5627,7 +5632,7 @@ async function runBackup(){
   /* ترتیب: سال-روز-ماه، مثل 1405-21-8 */
   const dateTxt = pv('year') + '-' + pv('day') + '-' + pv('month');
   const timeTxt = bkTimeTxt(now);
-  const fname = 'hisab.daftari-' + pv('day') + '-' + pv('month') + '-' + pv('year') + ' (' + n + ').json';
+  const fname = 'daftari-' + pv('day') + '-' + pv('month') + '-' + pv('year') + '-' + ((now.getHours() % 12) || 12) + '꞉' + String(now.getMinutes()).padStart(2,'0') + ' (' + n + ').json';
   const nbData = await bkNotebooks();
   const payload = {
     app: 'hisab-backup', version: 1, created: now.toISOString(), backupNo: n,
@@ -5643,14 +5648,15 @@ async function runBackup(){
   const bkAt = new Date().toISOString();
   LAST_BK = bkAt;
   try{ localStorage.setItem('hesab-last-backup', bkAt); }catch(e){}
-  if(supabaseClient && cloudUser && navigator.onLine){
-    try{
-      const { error } = await supabaseClient.from('s').update({ lbk: bkAt }).eq('u', cloudUser.id);
-      if(error) console.warn('backup time save:', error);
-    }catch(e){ console.warn('backup time save:', e); }
-  }
-  closeBk(); render();
+  render();
   showToast('پکاپ گیری با موفقیت در پوشه دانلود انجام شد', true);
+  /* ثبت زمان در سرور در پس‌زمینه انجام می‌شود و جلوی دانلود را نمی‌گیرد */
+  if(supabaseClient && cloudUser && navigator.onLine){
+    supabaseClient.from('s').update({ lbk: bkAt }).eq('u', cloudUser.id)
+      .then(({ error }) => { if(error) console.warn('backup time save:', error); })
+      .catch(e => console.warn('backup time save:', e));
+  }
+  }finally{ BK_BUSY = false; }
 }
 
 SUPA_READY.then(() => initCloudSession());
