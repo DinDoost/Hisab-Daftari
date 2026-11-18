@@ -1303,6 +1303,7 @@ async function ensureCloudUser(){
       const r = await withTimeoutSoft(supabaseClient.auth.getSession(), 10000);
       const u = r?.data?.session?.user || null;
       if(u) cloudUser = u;
+      else if(!cloudUser && navigator.onLine){ const ru = await restoreSessBackup(); if(ru) cloudUser = ru; }
       return cloudUser;
     } finally { SESS_P = null; }
   })();
@@ -3199,6 +3200,7 @@ function devName(){
 }
 /* وقتی این دستگاه از لیست حذف شده باشد، همین‌جا از حساب خارج می‌شود */
 async function deviceRevoked(){
+  clearSessBackup();
   try{ if(supabaseClient) await supabaseClient.auth.signOut({ scope:'local' }); }catch(e){}
   devCacheClear();
   cloudReady = false; cloudUser = null; clearTimeout(cloudSyncTimer);
@@ -3315,6 +3317,7 @@ async function devRemove(devId){
 }
 async function authLogout(){
   if(!confirm('از حساب خارج می‌شوید؟')) return;
+  clearSessBackup();
   if(supabaseClient) await supabaseClient.auth.signOut();
   devCacheClear();
   cloudReady = false; cloudUser = null; clearTimeout(cloudSyncTimer);
@@ -5393,6 +5396,23 @@ function storedSessionUser(){
   }catch(e){}
   return null;
 }
+/* نسخهٔ پشتیبان نشست روی همین گوشی: اگر کتابخانه نشست را از حافظه پاک کند، از اینجا دوباره وصل می‌شویم */
+function saveSessBackup(s){
+  try{ if(s && s.access_token && s.refresh_token) localStorage.setItem('hesab-sess-bk', JSON.stringify({a:s.access_token, r:s.refresh_token})); }catch(e){}
+}
+function clearSessBackup(){ try{ localStorage.removeItem('hesab-sess-bk'); }catch(e){} }
+async function restoreSessBackup(){
+  if(!supabaseClient) return null;
+  let bk = null;
+  try{ bk = JSON.parse(localStorage.getItem('hesab-sess-bk') || 'null'); }catch(e){}
+  if(!bk || !bk.r) return null;
+  try{
+    const r = await withTimeoutSoft(supabaseClient.auth.setSession({ access_token:bk.a, refresh_token:bk.r }), 12000);
+    const s = r?.data?.session;
+    if(s){ saveSessBackup(s); return s.user || null; }
+  }catch(e){}
+  return null;
+}
 let CLOUD_TRIES = 0;
 async function refreshCloudQuiet(){
   if(cloudReady) return;
@@ -5564,9 +5584,10 @@ async function initCloudSession(){
     }
     LK.locked = true; LK.err = 'اتصال Supabase بارگذاری نشد. اینترنت و آدرس پروژه را بررسی کنید.'; renderLock(); return;
   }
-  const _gs = await withTimeoutSoft(supabaseClient.auth.getSession(), 4000);
+  const _gs = await withTimeoutSoft(supabaseClient.auth.getSession(), 8000);
   const data = _gs?.data, error = _gs?.error;
   let sessUser = data?.session?.user || null;
+  if(!sessUser && navigator.onLine){ sessUser = await restoreSessBackup(); }
   /* اگر قبلاً وارد شده‌اید و PIN دارید، نشست ذخیره‌شده روی گوشی کافی است (حتی بدون اینترنت) */
   if(!sessUser && S.loggedIn && S.email) sessUser = storedSessionUser();
   if(error && !sessUser){ LK.locked = true; LK.err = 'خواندن نشست کاربری ناموفق بود.'; renderLock(); return; }
@@ -5686,6 +5707,13 @@ async function runBackup(){
   }finally{ BK_BUSY = false; }
 }
 
+SUPA_READY.then(() => { if(supabaseClient){
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if(session && session.access_token){ saveSessBackup(session); if(session.user) cloudUser = session.user; }
+    /* خروج غیرمنتظره (مثلاً تازه‌سازی توکن ناموفق): اگر نسخهٔ پشتیبان هست، نشست برگردانده می‌شود */
+    if(event === 'SIGNED_OUT'){ setTimeout(() => { restoreSessBackup().then(u => { if(u) cloudUser = u; }); }, 300); }
+  });
+} });
 SUPA_READY.then(() => initCloudSession());
 </script>
 </body>
