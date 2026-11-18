@@ -1441,10 +1441,20 @@ window.addEventListener('online', () => { if(!NBSYNCED && cloudUser) nbLoad(); }
   async function buildId(){
     try{
       const r = await fetch(url, { method:'HEAD', cache:'no-store' });
-      return r.headers.get('etag') || r.headers.get('last-modified') || '';
-    }catch(e){ return ''; }
+      const lm = r.headers.get('last-modified') || '';
+      const old = window.APP_LM_STATE + '|' + window.APP_LM;
+      if(lm){ window.APP_LM = lm; window.APP_LM_STATE = 'ok'; try{ localStorage.setItem('hesab-app-lm', lm); }catch(e){} }
+      else if(!window.APP_LM){ window.APP_LM_STATE = 'none'; }
+      if(old !== window.APP_LM_STATE + '|' + window.APP_LM && V.view === 'settings' && typeof render === 'function') render();
+      return r.headers.get('etag') || lm || '';
+    }catch(e){
+      window.APP_LM_STATE = window.APP_LM ? window.APP_LM_STATE : 'err';
+      if(V.view === 'settings' && typeof render === 'function') render();
+      return '';
+    }
   }
   function resumeAndReload(){
+    try{ sessionStorage.setItem('hesab-updated', '1'); }catch(e){}
     sessionStorage.setItem('hesab-resume', JSON.stringify({
       view:V.view, openId:V.openId, custId:V.custId, search:V.search, q:V.q, NBCUR:NBCUR, NBPICK:NBPICK
     }));
@@ -1467,6 +1477,13 @@ window.addEventListener('online', () => { if(!NBSYNCED && cloudUser) nbLoad(); }
       resumeAndReload();
     } finally { checking = false; }
   }
+  /* بعد از بروزرسانی خودکار یک پیام کوتاه نشان داده می‌شود */
+  try{
+    if(sessionStorage.getItem('hesab-updated') === '1'){
+      sessionStorage.removeItem('hesab-updated');
+      setTimeout(() => showToast('برنامه با نسخهٔ جدید بروز شد', true), 1200);
+    }
+  }catch(e){}
   setTimeout(check, 4000);
   setInterval(check, 5000);
   window.addEventListener('online', () => setTimeout(check, 1500));
@@ -1737,6 +1754,7 @@ function renderNow(){
         <button class="srow-b" data-a="usageTable">مصرف و سقف</button>
       </div>
       <div class="ka-row"><b>آخرین بروزرسانی سرور</b><span class="ka-v" id="ka-v">${kaText()}</span></div>
+      <div class="ka-row"><b>آخرین بروزرسانی برنامه</b><span class="ka-v">${appUpdText()}</span></div>
       <div class="ka-act">${kaBtnHTML()}</div>
       </div>
 
@@ -3934,6 +3952,14 @@ function kaFmt(iso){
     const tm = new Intl.DateTimeFormat('fa-IR', { hour:'2-digit', minute:'2-digit', hour12:false }).format(d);
     return dt + '، ساعت ' + tm;
   }catch(e){ return String(iso); }
+}
+function appUpdText(){
+  let last = window.APP_LM || '';
+  if(!last){ try{ last = localStorage.getItem('hesab-app-lm') || ''; }catch(e){} }
+  if(last) return kaFmt(last);
+  if(window.APP_LM_STATE === 'none') return 'سرور زمان را نفرستاد';
+  if(window.APP_LM_STATE === 'err') return 'خوانده نشد';
+  return 'در حال خواندن...';
 }
 function kaText(){
   if(KA.state === 'loading' || KA.state === 'idle') return 'در حال خواندن...';
