@@ -42,6 +42,7 @@ input:focus,select:focus{outline:2px solid #9fb9de;border-color:transparent}
 .tx-card{padding-left:60px}
 .tx-nm b{font-size:13px;line-height:1.55;font-weight:600;white-space:normal;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;line-clamp:4;word-break:break-word}
 .nm small{color:var(--muted);font-size:12px;margin-top:3px}
+.nm small.ph{color:#1f2937;font-size:12.25px;font-weight:700}
 .tx-nm b[data-a]{cursor:pointer}
 .tx-nm b.open{display:block;-webkit-line-clamp:unset;line-clamp:unset;overflow:visible;white-space:pre-wrap;overflow-wrap:anywhere}
 .bal{font-size:14px;font-weight:600;direction:ltr;white-space:nowrap;text-align:left}
@@ -1223,7 +1224,7 @@ function custCardHTML(p, c){
   return `<div class="lp-wrap cust-wrap">
     <button class="card" data-a="cust" data-p="${p.id}" data-c="${c.id}">
       ${avHTML(c, col)}
-      <span class="nm"><b>${esc(c.n)}</b><small>${c.ph ? fa(c.ph) : c.tx.length + ' تراکنش'}</small></span>
+      <span class="nm"><b>${esc(c.n)}</b><small class="ph">${c.ph ? phFa(c.ph) : c.tx.length + ' تراکنش'}</small></span>
       <span class="bal-col"><span class="bal ${balCls(b)}">${b === 0 ? '-' : money(b)}</span>${b === 0 ? '' : `<small class="bal-note">${b > 0 ? 'بدهکار است' : 'طلب دارد'}</small>`}</span>
     </button>
     <button class="pmore" data-a="custMore" data-p="${p.id}" data-c="${c.id}" aria-label="گزینه‌ها">⋮</button></div>`;
@@ -1811,7 +1812,7 @@ function renderNow(){
     m.innerHTML = pageHead(esc(c.n), 'list') + `
       <div class="tx-page">
         ${c.ph || c.ds ? `<div class="info">
-          ${c.ph ? `<div><span>شماره تلفن: </span>${fa(c.ph)}</div>` : ''}
+          ${c.ph ? `<div><span>شماره تلفن: </span>${phFa(c.ph)}</div>` : ''}
           ${c.ds ? `<div><span>توضیحات: </span>${esc(c.ds)}</div>` : ''}
         </div>` : ''}
         <button class="pbtn cm-btn" data-a="cMenuEdit" ${ids}>${ICON.edit}<span>ویرایش</span></button>
@@ -1872,7 +1873,7 @@ function renderNow(){
       </section>
       <div class="info" style="margin-top:14px;display:flex;align-items:center;gap:8px">
         <div style="flex:0 0 auto;min-width:0">
-          ${c.ph ? `<div><span>شماره تلفن:</span><a href="tel:${esc(c.ph)}" style="color:inherit;text-decoration:none;direction:ltr;display:block;font-weight:700">${fa(c.ph)}</a></div>` : ''}
+          ${c.ph ? `<div><span>شماره تلفن:</span><a href="tel:${esc(c.ph)}" style="color:inherit;text-decoration:none;direction:ltr;display:block;font-weight:700">${phFa(c.ph)}</a></div>` : ''}
           ${c.ds ? `<div><span>توضیحات: </span>${esc(c.ds)}</div>` : ''}
         </div>
         <input id="txq" class="txq-inp" type="search" placeholder="جستجو در شرح مبلغ..." value="${esc(TXQ)}">
@@ -1922,7 +1923,7 @@ function renderNow(){
           const card = `
           <button class="card" data-a="cust" data-p="${p.id}" data-c="${c.id}">
             ${avHTML(c, col)}
-            <span class="nm"><b>${esc(c.n)}</b><small>${c.ph ? fa(c.ph) : c.tx.length + ' تراکنش'}</small></span>
+            <span class="nm"><b>${esc(c.n)}</b><small class="ph">${c.ph ? phFa(c.ph) : c.tx.length + ' تراکنش'}</small></span>
             <span class="bal ${balCls(b)}">${b === 0 ? '-' : money(b)}</span>
           </button>`;
           const mk = `cust:${p.id}:${c.id}`;
@@ -2483,7 +2484,7 @@ function partySection(p){
         const card = `
         <button class="card" data-a="cust" data-p="${p.id}" data-c="${c.id}">
           ${avHTML(c, col)}
-          <span class="nm"><b>${esc(c.n)}</b><small>${c.ph ? fa(c.ph) : c.tx.length + ' تراکنش'}</small></span>
+          <span class="nm"><b>${esc(c.n)}</b><small class="ph">${c.ph ? phFa(c.ph) : c.tx.length + ' تراکنش'}</small></span>
           <span class="bal-col"><span class="bal ${balCls(b)}">${b === 0 ? '-' : money(b)}</span>${b === 0 ? '' : `<small class="bal-note">${b > 0 ? 'بدهکار است' : 'طلب دارد'}</small>`}</span>
         </button>`;
         const mk = `cust:${p.id}:${c.id}`;
@@ -2982,6 +2983,7 @@ async function usageRefresh(){
     return ok;
   }catch(e){ return false; }
 }
+function phFa(s){ return String(s == null ? '' : s).replace(/\d/g, x => '۰۱۲۳۴۵۶۷۸۹'[x]); }
 function fa(n, d){ return (Number(n) || 0).toLocaleString('fa-IR', { maximumFractionDigits: d }); }
 function usageSizeTxt(mb){
   if(mb >= 1024) return fa(mb / 1024, 2) + ' گیگابایت';
