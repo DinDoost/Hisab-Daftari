@@ -1546,6 +1546,8 @@ async function prefLoadCloud(){
     if(JSON.stringify(merged) !== JSON.stringify(cloud)) prefSyncNow(merged);
     /* ترتیب را فقط وقتی تازه‌تر از نسخهٔ این گوشی است اعمال می‌کنیم، نه در هر به‌روزرسانی */
     if(JSON.stringify(merged.ord) !== JSON.stringify(local.ord)) prefApplyOrder();
+    /* اگر آخرین انتخاب هنوز اعمال نشده، حالا که نسخهٔ ابری آمده دوباره امتحان می‌کنیم */
+    if(!PREF_DONE && V.view === 'list' && !V.openId){ prefRestore(); if(V.openId && !liveUIBusy()) render(); }
   }catch(e){ console.warn('pref load:', e); }
 }
 /* ترتیب ذخیره‌شده را روی طرف حساب‌ها و مشتری‌ها اعمال می‌کند؛ مواردی که ترتیب ندارند (تازه‌ها) آخر فهرست می‌مانند */
@@ -1602,7 +1604,8 @@ function prefRestore(){
       return;
     }
   }
-  if(cloudReady || !navigator.onLine) PREF_DONE = true;
+  /* فقط وقتی فهرست طرف حساب‌ها واقعاً بارگذاری شده، تسلیم می‌شویم؛ وگرنه آخرین انتخاب گم می‌شد */
+  if((cloudReady && S.parties.length) || (!navigator.onLine && S.parties.length)) PREF_DONE = true;
 }
 
 
@@ -1633,9 +1636,24 @@ function render(){
     }
   }
 }
+var SIMPLE_DONE = false;
+function simpleRestoreParty(){
+  if(SIMPLE_DONE) return;
+  if(V.view !== 'list' || V.openId){ SIMPLE_DONE = true; return; }
+  let id = null;
+  try{ id = localStorage.getItem('hesab-last-party'); }catch(e){}
+  if(id && findParty(id)){
+    V.openId = id; V.pick = false; SIMPLE_DONE = true;
+    try{ history.replaceState({v: Object.assign({}, V)}, ''); }catch(e){}
+    return;
+  }
+  /* اگر فهرست طرف حساب‌ها آماده است و چیزی پیدا نشد، دیگر تلاش نمی‌کنیم */
+  if(S.parties.length && (cloudReady || !navigator.onLine)) SIMPLE_DONE = true;
+}
 function renderNow(){
   const m = document.getElementById('main');
   if(V.view === 'detail') V.view = 'list';
+  simpleRestoreParty();
   prefRestore();
   prefTrack();
   if(LPSEL && LPSEL.view !== V.view) LPSEL = null;
@@ -2326,7 +2344,8 @@ async function shareImg3(c, onReady, asPdf, build){
   const tBottom = tTop + hdrH + rowHs.reduce((a, b) => a + b, 0);
   const H = tBottom + 130;
   const cv = document.createElement('canvas');
-  const Q = 2; cv.width = W * Q; cv.height = H * Q;
+  /* برای لیست‌های بلند، کیفیت را کم می‌کنیم تا بوم مرورگر (حدود ۴۰۹۶ پیکسل) جا شود و ردیف‌ها بریده نشوند */
+  const Q = (H * 2 > 4000) ? 1 : 2; cv.width = W * Q; cv.height = H * Q;
   const x = cv.getContext('2d');
   x.scale(Q, Q); x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
   const unit = curLabel();
@@ -2414,10 +2433,15 @@ async function shareImg3(c, onReady, asPdf, build){
 
   cv.toBlob(async jpg => {
     if(onReady) onReady();
+    /* اگر مرورگر بوم را خیلی بزرگ بداند، تصویر ساخته نمی‌شود؛ به‌جای سکوت، پیام می‌دهیم */
+    if(!jpg){ alert('ساخت فایل ممکن نشد، چون تعداد تراکنش‌ها زیاد است. لطفاً بازهٔ کوچک‌تری را انتخاب کنید یا از خلاصه متنی استفاده کنید.'); return; }
     let file, fallbackUrl;
     if(asPdf){
-      const bytes = new Uint8Array(await jpg.arrayBuffer());
-      const pdf = jpegToPdf(bytes, W, H, cv.width, cv.height);
+      let pdf;
+      try{
+        const bytes = new Uint8Array(await jpg.arrayBuffer());
+        pdf = jpegToPdf(bytes, W, H, cv.width, cv.height);
+      }catch(e){ console.warn('pdf build:', e); alert('ساخت PDF ممکن نشد. لطفاً دوباره تلاش کنید یا از اشتراک عکس استفاده کنید.'); return; }
       file = new File([pdf], `${c.n}.pdf`, { type: 'application/pdf' });
       fallbackUrl = pdf;
     } else {
@@ -4648,6 +4672,8 @@ document.addEventListener('click', async e => {
     case 'search': V.search = !V.search; if(!V.search) V.q = ''; render(); break;
     case 'selParty':
       V.openId = el.dataset.p; V.pick = false;
+      SIMPLE_DONE = true;
+      try{ localStorage.setItem('hesab-last-party', el.dataset.p); }catch(e){}
       history.replaceState({v:Object.assign({}, V)}, '');
       render(); window.scrollTo(0,0); break;
     case 'togglePick':
