@@ -2204,11 +2204,14 @@ async function shareImg2(c){
 function latinDate(y, m, d){ return `${y}-${m}-${d}`; }
 function amtText(n){ return Math.abs(n).toLocaleString('en-US') + ' ' + curLabel(); }
 function invData(c){
-  const list = [...c.tx].sort((a, b) => (kOf(b) - kOf(a)) || (b.ts - a.ts));
+  const full = [...c.tx].sort((a, b) => (kOf(b) - kOf(a)) || (b.ts - a.ts));
+  const pg = c.pg || null;
+  const list = pg ? full.slice(pg[0], pg[1]) : full;
+  const off = pg ? pg[0] : 0;
   let got = 0, pay = 0;
+  full.forEach(t => { if(t.a > 0) got += t.a; else pay += -t.a; });
   const rows = list.map((t, i) => {
-    if(t.a > 0) got += t.a; else pay += -t.a;
-    return { no: i + 1, amt: -t.a, type: t.a > 0 ? 'گرفت' : 'پرداخت', date: latinDate(t.y, t.m, t.dd), time: t.hh != null ? clockText(t.hh, t.mm || 0) : '', desc: t.d || '—' };
+    return { no: off + i + 1, amt: -t.a, type: t.a > 0 ? 'گرفت' : 'پرداخت', date: latinDate(t.y, t.m, t.dd), time: t.hh != null ? clockText(t.hh, t.mm || 0) : '', desc: t.d || '—' };
   });
   return { rows, got, pay, bal: custBal(c) };
 }
@@ -2278,6 +2281,79 @@ function jpegToPdf(jpgBytes, pw, ph, iw, ih){
   str(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
   return new Blob(chunks, { type: 'application/pdf' });
 }
+/* ---------- PDF چندصفحه‌ای: هر صفحه حدود ۱۸ تراکنش؛ برای لیست‌های بلند کامل می‌آید ---------- */
+const PDF_PER_PAGE = 18;
+function jpegSize(b){
+  let i = 2;
+  while(i + 9 < b.length){
+    if(b[i] !== 0xFF){ i++; continue; }
+    const m = b[i+1];
+    if(m === 0xD8 || m === 0x01 || (m >= 0xD0 && m <= 0xD7)){ i += 2; continue; }
+    const len = (b[i+2] << 8) | b[i+3];
+    if(m >= 0xC0 && m <= 0xCF && m !== 0xC4 && m !== 0xC8 && m !== 0xCC){
+      return { h: (b[i+5] << 8) | b[i+6], w: (b[i+7] << 8) | b[i+8] };
+    }
+    i += 2 + len;
+  }
+  return null;
+}
+function pagesToPdf(pages){
+  const enc = new TextEncoder(); const chunks = []; let len = 0; const offs = [];
+  const push = u => { chunks.push(u); len += u.length; };
+  const str = s => push(enc.encode(s));
+  const N = pages.length, maxObj = 3 * N + 2;
+  str('%PDF-1.4\n');
+  offs[1] = len; str('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+  const kids = pages.map((_, k) => `${3 + k * 3} 0 R`).join(' ');
+  offs[2] = len; str(`2 0 obj\n<< /Type /Pages /Kids [${kids}] /Count ${N} >>\nendobj\n`);
+  pages.forEach((pg, k) => {
+    const pn = 3 + k * 3, im = 4 + k * 3, ct = 5 + k * 3;
+    offs[pn] = len;
+    str(`${pn} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pg.pw} ${pg.ph}] /Resources << /XObject << /Im${k} ${im} 0 R >> >> /Contents ${ct} 0 R >>\nendobj\n`);
+    offs[im] = len;
+    str(`${im} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${pg.iw} /Height ${pg.ih} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${pg.bytes.length} >>\nstream\n`);
+    push(pg.bytes); str('\nendstream\nendobj\n');
+    const content = `q ${pg.pw} 0 0 ${pg.ph} 0 0 cm /Im${k} Do Q`;
+    offs[ct] = len;
+    str(`${ct} 0 obj\n<< /Length ${content.length} >>\nstream\n${content}\nendstream\nendobj\n`);
+  });
+  const xref = len;
+  str(`xref\n0 ${maxObj + 1}\n0000000000 65535 f \n`);
+  for(let i = 1; i <= maxObj; i++) str(`${String(offs[i]).padStart(10, '0')} 00000 n \n`);
+  str(`trailer\n<< /Size ${maxObj + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
+  return new Blob(chunks, { type: 'application/pdf' });
+}
+async function makePdfFile(c, onReady){
+  const total = invData(c).rows.length;
+  const pages = [];
+  for(let st = 0; st < Math.max(total, 1); st += PDF_PER_PAGE){
+    const sub = Object.assign({}, c, { pg: [st, st + PDF_PER_PAGE] });
+    const jf = await new Promise(res => shareImg3(sub, null, false, res));
+    if(!jf) throw new Error('image build failed');
+    const bytes = new Uint8Array(await jf.arrayBuffer());
+    const sz = jpegSize(bytes);
+    if(!sz) throw new Error('jpeg size unknown');
+    const pw = 800, ph = Math.round(sz.h * pw / sz.w);
+    pages.push({ bytes, pw, ph, iw: sz.w, ih: sz.h });
+  }
+  if(onReady) onReady();
+  return new File([pagesToPdf(pages)], `${c.n}.pdf`, { type: 'application/pdf' });
+}
+/* PDF را مستقیم می‌فرستد؛ اگر این نسخه از گوشی فایل PDF را نپذیرفت، در یک برگه باز می‌کند تا از آنجا بفرستید */
+async function shareFileOrOpen(file, title){
+  if(navigator.canShare && navigator.canShare({ files: [file] })){
+    try{ await navigator.share({ files: [file], title }); }catch(e){}
+    return;
+  }
+  const url = URL.createObjectURL(file);
+  const w = window.open(url, '_blank');
+  if(!w){
+    const a = document.createElement('a');
+    a.href = url; a.download = file.name;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
 function sharePdf3(c, onReady){ return shareImg3(c, onReady, true); }
 /* فایل PDF و عکس از قبل آماده می‌شود تا با یک لمس مستقیم به برنامه‌های اشتراک برود */
 const SHAREPRE = {};
@@ -2285,7 +2361,8 @@ function prewarmShare(c){
   if(!c) return;
   ['pdf','img'].forEach(k => {
     delete SHAREPRE[`${k}:${c.id}`];
-    shareImg3(c, null, k === 'pdf', f => { SHAREPRE[`${k}:${c.id}`] = f; }).catch(() => {});
+    if(k === 'pdf'){ makePdfFile(c).then(f => { SHAREPRE[`${k}:${c.id}`] = f; }).catch(() => {}); }
+    else shareImg3(c, null, false, f => { SHAREPRE[`${k}:${c.id}`] = f; }).catch(() => {});
   });
 }
 function fitText(x, text, cx, y, max, size, font, bold){
@@ -2313,6 +2390,11 @@ function wrapCanvasLines(mx, text, maxW){
   return out.length ? out : [''];
 }
 async function shareImg3(c, onReady, asPdf, build){
+  if(asPdf && typeof build !== 'function'){
+    try{ const f = await makePdfFile(c, onReady); await shareFileOrOpen(f, c.n); }
+    catch(e){ console.warn('pdf:', e); alert('ساخت PDF ممکن نشد. لطفاً دوباره تلاش کنید.'); }
+    return;
+  }
   const d = invData(c);
   const font = 'Vazirmatn, Tahoma, sans-serif';
   try{ await document.fonts.load('bold 16px Vazirmatn'); await document.fonts.load('bold 14px Vazirmatn'); await document.fonts.load('600 14px Vazirmatn'); }catch(e){}
@@ -2434,7 +2516,7 @@ async function shareImg3(c, onReady, asPdf, build){
   cv.toBlob(async jpg => {
     if(onReady) onReady();
     /* اگر مرورگر بوم را خیلی بزرگ بداند، تصویر ساخته نمی‌شود؛ به‌جای سکوت، پیام می‌دهیم */
-    if(!jpg){ alert('ساخت فایل ممکن نشد، چون تعداد تراکنش‌ها زیاد است. لطفاً بازهٔ کوچک‌تری را انتخاب کنید یا از خلاصه متنی استفاده کنید.'); return; }
+    if(!jpg){ if(typeof build === 'function'){ build(null); return; } alert('ساخت فایل ممکن نشد، چون تعداد تراکنش‌ها زیاد است. لطفاً بازهٔ کوچک‌تری را انتخاب کنید یا از خلاصه متنی استفاده کنید.'); return; }
     let file, fallbackUrl;
     if(asPdf){
       let pdf;
@@ -2449,6 +2531,11 @@ async function shareImg3(c, onReady, asPdf, build){
       fallbackUrl = jpg;
     }
     if(typeof build === 'function'){ build(file); return; }
+    /* بعضی نسخه‌های APK فایل PDF را برای اشتراک نمی‌پذیرند؛ در آن حالت همان صفحه را به‌صورت عکس می‌فرستیم که جواب می‌دهد */
+    if(asPdf && !(navigator.canShare && navigator.canShare({ files: [file] }))){
+      file = new File([jpg], `${c.n}.jpg`, { type: 'image/jpeg' });
+      fallbackUrl = jpg;
+    }
     if(navigator.canShare && navigator.canShare({ files: [file] })){
       try{ await navigator.share({ files: [file], title: c.n }); return; }catch(e){ return; }
     }
