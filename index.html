@@ -1190,6 +1190,8 @@ window.addEventListener('popstate', e => {
     return;
   }
   if(V.view === 'list' && V.pick){ V.pick = false; render(); return; }
+  /* اگر فهرست دفترچه‌ها باز است، برگشت فقط آن فهرست را می‌بندد و همان دفترچه فعلی می‌ماند */
+  if(NBPICK && (V.view === 'nbook' || V.view === 'nbList')){ NBPICK = false; render(); return; }
   {
     const toList = !(e.state && e.state.v) || (e.state.v.view === 'list' && !e.state.v.openId);
     if(V.view === 'list' && V.openId && !V.pick && toList){ history.back(); return; }
@@ -4906,7 +4908,15 @@ document.addEventListener('click', async e => {
     }
     case 'nbOpen': NBCUR = el.dataset.p; NBPICK = false; NBQ = ''; NBFROM = ''; NBTO = ''; goTo({view:'nbook', openId: el.dataset.p}); break;
     case 'nbSwitch': NBCUR = el.dataset.p; NBPICK = false; NBQ = ''; NBFROM = ''; NBTO = ''; goTo({view:'nbook', openId: el.dataset.p}, true); break;
-    case 'nbPickToggle': NBPICK = !NBPICK; render(); break;
+    case 'nbPickToggle':
+      if(!NBPICK){
+        NBPICK = true;
+        try{ history.pushState({v:Object.assign({}, V), pk:'nb'}, ''); }catch(e){}
+      } else {
+        NBPICK = false;
+        if(history.state && history.state.pk === 'nb'){ IGN++; history.back(); }
+      }
+      render(); break;
     case 'nbAdd': openSheet(sheetHead('افزودن دفترچه') + `
       <label for="f-nbn">نام دفترچه</label>
       <input id="f-nbn" maxlength="60">
