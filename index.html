@@ -1456,7 +1456,7 @@ window.addEventListener('online', () => { if(!NBSYNCED && cloudUser) nbLoad(); }
     }
   }
   function resumeAndReload(){
-    try{ sessionStorage.setItem('hesab-updated', '1'); }catch(e){}
+    try{ localStorage.setItem('hesab-updated-pending', '1'); }catch(e){}
     sessionStorage.setItem('hesab-resume', JSON.stringify({
       view:V.view, openId:V.openId, custId:V.custId, search:V.search, q:V.q, NBCUR:NBCUR, NBPICK:NBPICK
     }));
@@ -1480,9 +1480,10 @@ window.addEventListener('online', () => { if(!NBSYNCED && cloudUser) nbLoad(); }
     } finally { checking = false; }
   }
   /* بعد از بروزرسانی خودکار یک پیام کوتاه نشان داده می‌شود */
+  /* پیام فقط یک بار، بعد از یک بروزرسانی واقعی نشان داده می‌شود و بلافاصله پاک می‌شود */
   try{
-    if(sessionStorage.getItem('hesab-updated') === '1'){
-      sessionStorage.removeItem('hesab-updated');
+    if(localStorage.getItem('hesab-updated-pending') === '1'){
+      localStorage.removeItem('hesab-updated-pending');
       setTimeout(() => showToast('برنامه با نسخهٔ جدید بروز شد', true), 1200);
     }
   }catch(e){}
