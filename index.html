@@ -1189,6 +1189,11 @@ window.addEventListener('popstate', e => {
     else document.getElementById('ov').classList.add('hidden');
     return;
   }
+  if(V.view === 'list' && V.pick){ V.pick = false; render(); return; }
+  {
+    const toList = !(e.state && e.state.v) || (e.state.v.view === 'list' && !e.state.v.openId);
+    if(V.view === 'list' && V.openId && !V.pick && toList){ history.back(); return; }
+  }
   soundBack();
   const st = e.state && e.state.v ? e.state.v : {view:'list'};
   V = Object.assign({view:'list', openId:null, custId:null, search:false, q:''}, st);
@@ -1601,7 +1606,7 @@ function prefRestore(){
     }
     if(V2){
       V = V2; PREF_DONE = true; PREF_LAST = p.kind + ':' + p.id;
-      try{ history.replaceState({v: Object.assign({}, V)}, ''); }catch(e){}
+      pinPartyStep();
       return;
     }
   }
@@ -1638,6 +1643,13 @@ function render(){
   }
 }
 var SIMPLE_DONE = false;
+/* پایهٔ تاریخچه را بدون طرف حساب قدیمی می‌کند و بعد مرحلهٔ طرف حساب را اضافه می‌کند */
+function pinPartyStep(){
+  try{
+    history.replaceState({v:{view:'list', openId:null, custId:null, search:false, q:''}}, '');
+    history.pushState({v:Object.assign({}, V)}, '');
+  }catch(e){}
+}
 function simpleRestoreParty(){
   if(SIMPLE_DONE) return;
   if(V.view !== 'list' || V.openId){ SIMPLE_DONE = true; return; }
@@ -1645,7 +1657,7 @@ function simpleRestoreParty(){
   try{ id = localStorage.getItem('hesab-last-party'); }catch(e){}
   if(id && findParty(id)){
     V.openId = id; V.pick = false; SIMPLE_DONE = true;
-    try{ history.replaceState({v: Object.assign({}, V)}, ''); }catch(e){}
+    pinPartyStep();
     return;
   }
   /* اگر فهرست طرف حساب‌ها آماده است و چیزی پیدا نشد، دیگر تلاش نمی‌کنیم */
@@ -4765,7 +4777,14 @@ document.addEventListener('click', async e => {
       history.replaceState({v:Object.assign({}, V)}, '');
       render(); window.scrollTo(0,0); break;
     case 'togglePick':
-      V.pick = !V.pick; render(); break;
+      if(!V.pick){
+        V.pick = true;
+        try{ history.pushState({v:Object.assign({}, V, {pick:false}), pk:1}, ''); }catch(e){}
+      } else {
+        V.pick = false;
+        if(history.state && history.state.pk){ IGN++; history.back(); }
+      }
+      render(); break;
     case 'cust': goTo({view:'cust', openId:p.id, custId:c.id}); break;
     case 'back': {
       history.back(); break;
